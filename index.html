@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Company Chat</title>
+    <title>Company Chat Pro</title>
     
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -14,28 +14,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
-        /* Use the Inter font family and add some base styling */
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-        /* Custom scrollbar for a cleaner look in chat areas */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #1f2937; 
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #4b5563; 
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #6b7280; 
-        }
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        .sidebar { transition: width 0.3s ease-in-out; }
     </style>
 </head>
 <body class="bg-gray-900">
-    <!-- This is where our React application will be rendered -->
     <div id="root"></div>
 
     <!-- React Libraries -->
@@ -45,28 +32,27 @@
     <!-- Babel to transpile JSX in the browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- Firebase SDKs (Updated to v11.6.1) -->
+    <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, setDoc, query, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, setDoc, query, updateDoc, where, getDocs, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
-        // Make Firebase services available globally for our React script
         window.firebaseServices = {
             initializeApp,
-            getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken,
-            getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, setDoc, query, updateDoc,
+            getAuth, signInAnonymously, onAuthStateChanged,
+            getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, setDoc, query, updateDoc, where, getDocs, arrayUnion, getDoc,
             getStorage, ref, uploadBytes, getDownloadURL
         };
     </script>
 
-    <!-- Our React Application Code -->
+    <!-- React Application Code -->
     <script type="text/babel" data-presets="react">
         const { useState, useEffect, useRef } = React;
         
         // --- Firebase Configuration ---
-        // YOUR ACTUAL FIREBASE CONFIG
+        // This is the configuration for YOUR Firebase project.
         const firebaseConfig = {
             apiKey: "AIzaSyCcqfbDluQqNBDCElYzVOg3pBV5bG46Sjc",
             authDomain: "chat-39642.firebaseapp.com",
@@ -78,291 +64,519 @@
             measurementId: "G-DB1WNLYV81"
         };
 
-        // --- App ID Configuration ---
-        const appId = 'company-chat-v1'; // Unique identifier for your chat app
+        const appId = 'company-chat-v1'; // Unique identifier for your app's data
 
-        // --- Main App Component ---
         function App() {
             const [services, setServices] = useState(null);
             const [user, setUser] = useState(null);
             const [isAuthReady, setIsAuthReady] = useState(false);
-            const [connectionError, setConnectionError] = useState(null);
+            const [error, setError] = useState(null);
 
             useEffect(() => {
-                // Set a timeout to handle cases where connection fails
-                const connectionTimeout = setTimeout(() => {
-                    if (!isAuthReady) {
-                        setConnectionError(
-                            "Could not connect to the chat server. Please check your internet connection and try refreshing the page."
-                        );
-                    }
-                }, 8000); // 8-second timeout
-
-                // Wait for Firebase services to be loaded into the window object
-                const serviceCheckInterval = setInterval(() => {
+                let servicesInstance = null;
+                
+                try {
                     if (window.firebaseServices) {
-                        clearInterval(serviceCheckInterval);
-                        
-                        try {
-                            const s = window.firebaseServices;
-                            const app = s.initializeApp(firebaseConfig);
-                            const auth = s.getAuth(app);
-                            const db = s.getFirestore(app);
-                            const storage = s.getStorage(app);
-                            
-                            const currentServices = { app, auth, db, storage, ...s };
-                            setServices(currentServices);
-
-                            let userDocUnsubscribe = null;
-                            const authUnsubscribe = s.onAuthStateChanged(auth, async (auth_user) => {
-                                if (auth_user) {
-                                    if (userDocUnsubscribe) userDocUnsubscribe();
-                                    
-                                    const userDocRef = s.doc(db, `artifacts/${appId}/public/data/users/${auth_user.uid}`);
-                                    userDocUnsubscribe = s.onSnapshot(userDocRef, (userDoc) => {
-                                        clearTimeout(connectionTimeout); // Successfully connected
-                                        if (userDoc.exists()) {
-                                            setUser({ ...auth_user, ...userDoc.data() });
-                                        } else {
-                                            const initialUserData = { 
-                                                uid: auth_user.uid,
-                                                displayName: `User-${auth_user.uid.substring(0, 6)}`,
-                                                photoURL: '',
-                                                lastSeen: s.serverTimestamp(),
-                                            };
-                                            s.setDoc(userDocRef, initialUserData).then(() => {
-                                                setUser({ ...auth_user, ...initialUserData });
-                                            });
-                                        }
-                                        setIsAuthReady(true);
-                                    });
-                                } else {
-                                    if (userDocUnsubscribe) userDocUnsubscribe();
-                                    setUser(null);
-                                    await s.signInAnonymously(auth);
-                                }
-                            });
-
-                            // Cleanup function for useEffect
-                            return () => {
-                                clearTimeout(connectionTimeout);
-                                authUnsubscribe();
-                                if(userDocUnsubscribe) userDocUnsubscribe();
-                            };
-                        } catch (error) {
-                            console.error("Firebase Init Error:", error);
-                            setConnectionError("Failed to initialize the application. Please check the Firebase configuration.");
-                        }
+                        const s = window.firebaseServices;
+                        const app = s.initializeApp(firebaseConfig);
+                        const auth = s.getAuth(app);
+                        const db = s.getFirestore(app);
+                        const storage = s.getStorage(app);
+                        servicesInstance = { app, auth, db, storage, ...s };
+                        setServices(servicesInstance);
+                    } else {
+                        setError("Firebase scripts did not load.");
+                        return;
                     }
-                }, 100);
-
-                return () => {
-                  clearTimeout(connectionTimeout);
-                  clearInterval(serviceCheckInterval);
+                } catch(e) {
+                    console.error("Firebase Init Error:", e);
+                    setError("Could not initialize Firebase. Please check your configuration.");
+                    return;
                 }
+
+                const authUnsubscribe = servicesInstance.onAuthStateChanged(servicesInstance.auth, async (authUser) => {
+                    if (authUser) {
+                        setIsAuthReady(true);
+                        
+                        const userDocRef = servicesInstance.doc(servicesInstance.db, `artifacts/${appId}/public/data/users/${authUser.uid}`);
+                        const userProfileUnsubscribe = servicesInstance.onSnapshot(userDocRef, (userDoc) => {
+                            if (userDoc.exists()) {
+                                setUser({ ...authUser, ...userDoc.data() });
+                            } else {
+                                servicesInstance.setDoc(userDocRef, {
+                                    uid: authUser.uid,
+                                    displayName: `User-${authUser.uid.slice(-6)}`,
+                                    photoURL: '',
+                                    lastSeen: servicesInstance.serverTimestamp(),
+                                    friends: [],
+                                });
+                            }
+                        });
+                        
+                        return () => userProfileUnsubscribe();
+                    } else {
+                        servicesInstance.signInAnonymously(servicesInstance.auth).catch(authError => {
+                             console.error("Anonymous Sign-In Error: ", authError);
+                             setError("Could not authenticate with the server.");
+                        });
+                    }
+                });
+
+                return () => authUnsubscribe();
+
             }, []);
 
-            if (connectionError) {
-                return (
-                    <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
-                        <div className="text-center p-8 bg-gray-800 rounded-lg shadow-lg max-w-md">
-                            <h2 className="text-2xl font-bold text-red-500 mb-4">Connection Failed</h2>
-                            <p className="text-gray-300 mb-4">{connectionError}</p>
-                            <button 
-                                onClick={() => window.location.reload()} 
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
-                            >
-                                Try Again
-                            </button>
-                        </div>
-                    </div>
-                );
-            }
+            if (error) return <ErrorMessage message={error} />;
+            if (!isAuthReady || !user || !services) return <LoadingScreen />;
 
-            if (!isAuthReady || !user || !services) {
-                return (
-                    <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
-                        <div className="text-center">
-                            <svg className="animate-spin h-10 w-10 text-blue-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <p className="text-xl">Connecting to Company Chat...</p>
-                            <p className="text-sm text-gray-400 mt-2">Setting up secure connection...</p>
-                        </div>
-                    </div>
-                );
-            }
-
-            return <ChatInterface user={user} services={services} />;
+            return <ChatLayout user={user} services={services} />;
         }
         
-        // --- Chat Interface Component ---
-        function ChatInterface({ user, services }) {
-            const { db, storage } = services;
-            const [messages, setMessages] = useState([]);
-            const [newMessage, setNewMessage] = useState('');
-            const [users, setUsers] = useState([]);
+        // --- Components ---
+
+        function LoadingScreen() {
+            return (
+                <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
+                    <div className="text-center">
+                        <svg className="animate-spin h-10 w-10 text-blue-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <p className="text-xl">Connecting to Secure Chat...</p>
+                    </div>
+                </div>
+            );
+        }
+
+        function ErrorMessage({ message }) {
+            return (
+                <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
+                    <div className="text-center p-8 bg-gray-800 rounded-lg shadow-lg max-w-md">
+                        <h2 className="text-2xl font-bold text-red-500 mb-4">Connection Failed</h2>
+                        <p className="text-gray-300">{message}</p>
+                    </div>
+                </div>
+            );
+        }
+
+        function ChatLayout({ user, services }) {
+            const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+            const [activeRoom, setActiveRoom] = useState(null);
+
+            return (
+                <div className="flex h-screen antialiased text-gray-200 bg-gray-900">
+                    <Sidebar 
+                        user={user} 
+                        services={services} 
+                        isOpen={isSidebarOpen} 
+                        setIsOpen={setIsSidebarOpen} 
+                        setActiveRoom={setActiveRoom}
+                        activeRoomId={activeRoom?.id}
+                    />
+                    <MainChatArea 
+                        user={user} 
+                        services={services} 
+                        activeRoom={activeRoom}
+                        isSidebarOpen={isSidebarOpen}
+                        setIsSidebarOpen={setIsSidebarOpen}
+                    />
+                </div>
+            );
+        }
+
+        function Sidebar({ user, services, isOpen, setIsOpen, setActiveRoom, activeRoomId }) {
+            const [rooms, setRooms] = useState([]);
+            const [friends, setFriends] = useState([]);
+            const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+            const [showJoinRoomModal, setShowJoinRoomModal] = useState(false);
+            const [showAddFriendModal, setShowAddFriendModal] = useState(false);
             const [showProfileModal, setShowProfileModal] = useState(false);
-            const messagesEndRef = useRef(null);
-            const fileInputRef = useRef(null);
 
-            const messagesCollectionRef = services.collection(db, `artifacts/${appId}/public/data/messages`);
-            const usersCollectionRef = services.collection(db, `artifacts/${appId}/public/data/users`);
-
-            useEffect(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), [messages]);
+            useEffect(() => {
+                const roomsPath = `artifacts/${appId}/public/data/rooms`;
+                const q = services.query(services.collection(services.db, roomsPath), services.where('members', 'array-contains', user.uid));
+                const unsubscribe = services.onSnapshot(q, (snapshot) => {
+                    setRooms(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+                });
+                return unsubscribe;
+            }, [user.uid]);
             
             useEffect(() => {
-                const q = services.query(messagesCollectionRef);
-                const unsubscribe = services.onSnapshot(q, (querySnapshot) => {
-                    const msgs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                 if (!user.friends || user.friends.length === 0) {
+                     setFriends([]);
+                     return;
+                 };
+                const usersPath = `artifacts/${appId}/public/data/users`;
+                const q = services.query(services.collection(services.db, usersPath), services.where('uid', 'in', user.friends));
+                const unsubscribe = services.onSnapshot(q, (snapshot) => {
+                    setFriends(snapshot.docs.map(d => d.data()));
+                });
+                return unsubscribe;
+            }, [user.friends]);
+
+            const publicRooms = rooms.filter(r => r.type === 'public');
+            const privateRooms = rooms.filter(r => r.type === 'private');
+
+            const handleRoomSelect = (room) => {
+                setActiveRoom(room);
+                if(window.innerWidth < 768) setIsOpen(false);
+            }
+            
+            if (!isOpen) {
+                return (
+                     <button onClick={() => setIsOpen(true)} className="absolute top-4 left-4 z-20 p-2 bg-gray-800 rounded-md text-white hover:bg-gray-700">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+                    </button>
+                )
+            }
+
+            return (
+                <aside className="sidebar flex flex-col bg-gray-900 border-r border-gray-700 flex-shrink-0" style={{width: isOpen ? '256px' : '0px'}}>
+                    <div className="flex-shrink-0 px-4 py-3 border-b border-gray-700 flex justify-between items-center">
+                         <div>
+                            <h1 className="text-xl font-bold text-white">Chat Pro</h1>
+                            <p className="text-xs text-gray-400 mt-1 truncate" title={user.uid}>ID: {user.uid}</p>
+                         </div>
+                         <button onClick={() => setIsOpen(false)} className="p-1 text-gray-400 hover:text-white">
+                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
+                         </button>
+                    </div>
+
+                    <div className="flex-grow p-4 overflow-y-auto">
+                        <RoomList title="Public Rooms" rooms={publicRooms} onSelect={handleRoomSelect} activeRoomId={activeRoomId} />
+                        <RoomList title="Private Rooms" rooms={privateRooms} onSelect={handleRoomSelect} activeRoomId={activeRoomId} />
+                        <FriendList friends={friends} />
+                    </div>
+
+                    <div className="flex-shrink-0 p-2 border-t border-gray-700">
+                        <button onClick={() => setShowCreateRoomModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Create Room</button>
+                        <button onClick={() => setShowJoinRoomModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Join Room</button>
+                        <button onClick={() => setShowAddFriendModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Add Friend</button>
+                        <button onClick={() => setShowProfileModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Edit Profile</button>
+                    </div>
+                    
+                    {showCreateRoomModal && <CreateRoomModal user={user} services={services} closeModal={() => setShowCreateRoomModal(false)} />}
+                    {showJoinRoomModal && <JoinRoomModal user={user} services={services} closeModal={() => setShowJoinRoomModal(false)} />}
+                    {showAddFriendModal && <AddFriendModal user={user} services={services} closeModal={() => setShowAddFriendModal(false)} />}
+                    {showProfileModal && <ProfileModal user={user} services={services} closeModal={() => setShowProfileModal(false)} />}
+                </aside>
+            );
+        }
+
+        function RoomList({ title, rooms, onSelect, activeRoomId }) {
+            return (
+                <div className="mb-4">
+                    <h2 className="text-sm font-semibold text-gray-400 mb-2 px-2">{title}</h2>
+                    <ul>
+                        {rooms.map(room => (
+                            <li key={room.id} onClick={() => onSelect(room)} className={`p-2 rounded-md cursor-pointer text-sm ${activeRoomId === room.id ? 'bg-blue-900/70' : 'hover:bg-gray-700/50'}`}>
+                                # {room.name}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )
+        }
+        
+        function FriendList({ friends }) {
+            return (
+                 <div className="mb-4">
+                    <h2 className="text-sm font-semibold text-gray-400 mb-2 px-2">Friends</h2>
+                    <ul>
+                        {friends.map(friend => (
+                            <li key={friend.uid} className="flex items-center p-2 rounded-md text-sm">
+                                <span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span>
+                                <img src={friend.photoURL || `https://placehold.co/32x32/374151/E5E7EB?text=${(friend.displayName || 'U')[0]}`} alt={friend.displayName} className="w-6 h-6 rounded-full mr-2" />
+                                {friend.displayName}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )
+        }
+
+        function MainChatArea({ user, services, activeRoom, isSidebarOpen, setIsSidebarOpen }) {
+            const [messages, setMessages] = useState([]);
+            const [copied, setCopied] = useState(false);
+            const messagesEndRef = useRef(null);
+
+            const copyRoomId = () => {
+                if (!activeRoom || !activeRoom.id) return;
+                navigator.clipboard.writeText(activeRoom.id).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                });
+            };
+            
+            useEffect(() => {
+                if (!activeRoom) {
+                    setMessages([]);
+                    return;
+                }
+                const messagesPath = `artifacts/${appId}/public/data/rooms/${activeRoom.id}/messages`;
+                const q = services.query(services.collection(services.db, messagesPath));
+                const unsubscribe = services.onSnapshot(q, (snapshot) => {
+                    const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                     msgs.sort((a, b) => a.createdAt?.seconds - b.createdAt?.seconds);
                     setMessages(msgs);
                 });
                 return unsubscribe;
-            }, []);
-
+            }, [activeRoom]);
+            
             useEffect(() => {
-                const userDocRef = services.doc(db, `artifacts/${appId}/public/data/users/${user.uid}`);
-                services.setDoc(userDocRef, { lastSeen: services.serverTimestamp() }, { merge: true });
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, [messages]);
 
-                const unsubscribeUsers = services.onSnapshot(usersCollectionRef, (querySnapshot) => {
-                    setUsers(querySnapshot.docs.map(d => d.data()));
-                });
-                return unsubscribeUsers;
-            }, [user.uid]);
+            if (!activeRoom) {
+                return (
+                    <div className="flex-1 flex items-center justify-center text-center p-4">
+                        {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="absolute top-4 left-4 z-20 p-2 bg-gray-800 rounded-md text-white hover:bg-gray-700 md:hidden">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+                        </button>}
+                        <div>
+                            <h2 className="text-2xl font-bold">Welcome to Chat Pro</h2>
+                            <p className="text-gray-400 mt-2">Select a room from the sidebar to start chatting.</p>
+                        </div>
+                    </div>
+                );
+            }
 
-            const handleSendMessage = async (e) => {
+            return (
+                <main className="flex flex-col flex-1 min-w-0">
+                    <header className="flex-shrink-0 bg-gray-900 border-b border-gray-700 p-4 flex items-center">
+                        {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-1 text-gray-400 hover:text-white mr-4">
+                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+                         </button>}
+                        <h2 className="text-xl font-semibold"># {activeRoom.name}</h2>
+                        {activeRoom.type === 'private' && (
+                            <div className="ml-4 text-xs flex items-center bg-gray-700 px-2 py-1 rounded-full cursor-pointer" title="Copy Room ID" onClick={copyRoomId}>
+                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                                {copied ? 'ID Copied!' : 'Copy ID'}
+                            </div>
+                        )}
+                    </header>
+                    
+                    <div className="flex-1 p-4 sm:p-6 overflow-y-auto">
+                        {messages.map(msg => <MessageBubble key={msg.id} message={msg} isOwnMessage={msg.uid === user.uid} />)}
+                        <div ref={messagesEndRef} />
+                    </div>
+
+                    <MessageInput user={user} services={services} activeRoom={activeRoom} />
+                </main>
+            );
+        }
+        
+        function MessageBubble({ message, isOwnMessage }) {
+            const avatarSrc = message.photoURL || `https://placehold.co/32x32/374151/E5E7EB?text=${(message.displayName || 'U')[0]}`;
+            
+            return (
+                <div className={`chat-message flex items-end my-2 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                    {!isOwnMessage && <img src={avatarSrc} alt={message.displayName} className="w-8 h-8 rounded-full order-1 flex-shrink-0" />}
+                    <div className={`flex flex-col space-y-1 text-sm max-w-xs mx-2 ${isOwnMessage ? 'order-1 items-end' : 'order-2 items-start'}`}>
+                        <div>
+                             {!isOwnMessage && <div className="text-xs text-gray-400 mb-1 px-1">{message.displayName}</div>}
+                            <div className={`px-4 py-2 rounded-lg inline-block ${isOwnMessage ? 'rounded-br-none bg-blue-600 text-white' : 'rounded-bl-none bg-gray-700 text-gray-200'}`}>
+                                {message.text}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        function MessageInput({ user, services, activeRoom }) {
+             const [newMessage, setNewMessage] = useState('');
+
+             const handleSendMessage = async (e) => {
                 e.preventDefault();
                 if (newMessage.trim() === '') return;
                 try {
+                    const messagesPath = `artifacts/${appId}/public/data/rooms/${activeRoom.id}/messages`;
+                    const messagesCollectionRef = services.collection(services.db, messagesPath);
                     await services.addDoc(messagesCollectionRef, {
                         text: newMessage,
                         createdAt: services.serverTimestamp(),
                         uid: user.uid,
-                        displayName: user.displayName || `User-${user.uid.substring(0, 6)}`,
-                        photoURL: user.photoURL || '',
-                        type: 'text',
+                        displayName: user.displayName,
+                        photoURL: user.photoURL,
                     });
                     setNewMessage('');
                 } catch (error) { console.error("Error sending message: ", error); }
             };
 
-            const handleFileUpload = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const storageRef = services.ref(storage, `chat_files/${appId}/${file.name}_${Date.now()}`);
-                try {
-                    await services.uploadBytes(storageRef, file);
-                    const downloadURL = await services.getDownloadURL(storageRef);
-                    const fileType = file.type.startsWith('image/') ? 'image' : 'document';
-                    await services.addDoc(messagesCollectionRef, {
-                        createdAt: services.serverTimestamp(),
-                        uid: user.uid,
-                        displayName: user.displayName || `User-${user.uid.substring(0, 6)}`,
-                        photoURL: user.photoURL || '',
-                        type: fileType,
-                        fileURL: downloadURL,
-                        fileName: file.name
-                    });
-                } catch(error) { console.error("Error uploading file:", error); }
-            };
-
             return (
-                <React.Fragment>
-                    <div className="flex h-screen antialiased text-gray-200 bg-gray-900">
-                        <aside className="flex flex-col w-64 bg-gray-900 border-r border-gray-700 flex-shrink-0">
-                            <div className="flex-shrink-0 px-4 py-3 border-b border-gray-700">
-                                 <h1 className="text-xl font-bold text-white">Company Chat</h1>
-                                 <p className="text-xs text-gray-400 mt-1 truncate" title={user.uid}>Your ID: {user.uid}</p>
-                                 <button onClick={() => setShowProfileModal(true)} className="mt-2 w-full text-sm bg-blue-600 hover:bg-blue-700 rounded-md py-1">Edit Profile</button>
-                            </div>
-                            <div className="flex-grow p-4 overflow-y-auto">
-                                <h2 className="text-sm font-semibold text-gray-400 mb-3">Online Users</h2>
-                                <ul>
-                                    {users.map(u => (
-                                        <li key={u.uid} className={`flex items-center p-2 rounded-md ${u.uid === user.uid ? 'bg-blue-900/50' : ''}`}>
-                                            <img src={u.photoURL || `https://placehold.co/32x32/374151/E5E7EB?text=${(u.displayName || 'U')[0]}`} alt={u.displayName} className="w-8 h-8 rounded-full mr-3" />
-                                            <span className="text-sm">{u.displayName}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        </aside>
-                        <main className="flex flex-col flex-1 min-w-0">
-                            <div className="flex-1 p-4 sm:p-6 justify-between flex flex-col overflow-y-auto">
-                                <div id="messages" className="flex flex-col space-y-4 p-3">
-                                    {messages.map(message => <MessageBubble key={message.id} message={message} user={user} isOwnMessage={message.uid === user.uid} /> )}
-                                     <div ref={messagesEndRef} />
-                                </div>
-                                <div className="border-t-2 border-gray-700 px-4 pt-4 mb-2 sm:mb-0">
-                                    <form onSubmit={handleSendMessage} className="relative flex">
-                                         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-                                        <button type="button" onClick={() => fileInputRef.current.click()} className="absolute left-0 inset-y-0 flex items-center justify-center px-3 text-gray-400 hover:text-gray-200" title="Attach file">
-                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
-                                        </button>
-                                        <input
-                                            type="text"
-                                            value={newMessage}
-                                            onChange={(e) => setNewMessage(e.target.value)}
-                                            placeholder="Write your message!"
-                                            className="w-full focus:outline-none focus:placeholder-gray-400 text-gray-200 placeholder-gray-500 pl-12 pr-20 bg-gray-800 rounded-md py-3 border border-gray-600 focus:border-blue-500"
-                                        />
-                                        <div className="absolute right-0 items-center inset-y-0 hidden sm:flex">
-                                            <button type="submit" className="inline-flex items-center justify-center rounded-lg px-4 py-2 transition duration-500 ease-in-out text-white bg-blue-600 hover:bg-blue-700 focus:outline-none mr-2">
-                                                <span className="font-bold">Send</span>
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-6 w-6 ml-2 transform rotate-90"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </main>
-                    </div>
-                    {showProfileModal && <ProfileModal user={user} services={services} closeModal={() => setShowProfileModal(false)} />}
-                </React.Fragment>
-            );
-        }
-
-        // --- Message Bubble Component ---
-        function MessageBubble({ message, isOwnMessage, user }) {
-            const renderContent = () => {
-                switch (message.type) {
-                    case 'image':
-                        return <img src={message.fileURL} alt={message.fileName || 'Uploaded image'} className="rounded-lg max-w-xs cursor-pointer" onClick={()=> window.open(message.fileURL, "_blank")} />;
-                    case 'document':
-                        return (
-                            <a href={message.fileURL} target="_blank" rel="noopener noreferrer" className="flex items-center bg-gray-600 p-2 rounded-lg hover:bg-gray-500">
-                                <svg className="w-6 h-6 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                                <span className="truncate">{message.fileName}</span>
-                            </a>
-                        );
-                    default:
-                        return message.text;
-                }
-            };
-            
-            const avatarSrc = isOwnMessage ? user.photoURL : message.photoURL;
-            const displayName = isOwnMessage ? user.displayName : message.displayName;
-            const avatarText = (displayName || 'U')[0];
-
-            return (
-                <div className={`chat-message flex items-end ${isOwnMessage ? 'justify-end' : ''}`}>
-                     {!isOwnMessage && <img src={avatarSrc || `https://placehold.co/32x32/374151/E5E7EB?text=${avatarText}`} alt={displayName} className="w-8 h-8 rounded-full order-1" />}
-                    <div className={`flex flex-col space-y-1 text-sm max-w-xs mx-2 ${isOwnMessage ? 'order-1 items-end' : 'order-2 items-start'}`}>
-                        <div>
-                             {!isOwnMessage && <div className="text-xs text-gray-400 mb-1 px-1">{displayName}</div>}
-                            <span className={`px-4 py-2 rounded-lg inline-block ${isOwnMessage ? 'rounded-br-none bg-blue-600 text-white' : 'rounded-bl-none bg-gray-700 text-gray-200'}`}>
-                                {renderContent()}
-                            </span>
+                 <div className="border-t-2 border-gray-700 px-4 pt-4 mb-2 sm:mb-0">
+                    <form onSubmit={handleSendMessage} className="relative flex">
+                        <input
+                            type="text"
+                            value={newMessage}
+                            onChange={(e) => setNewMessage(e.target.value)}
+                            placeholder={`Message #${activeRoom.name}`}
+                            className="w-full focus:outline-none focus:placeholder-gray-400 text-gray-200 placeholder-gray-500 pl-4 pr-20 bg-gray-800 rounded-md py-3 border border-gray-600 focus:border-blue-500"
+                        />
+                        <div className="absolute right-0 items-center inset-y-0 hidden sm:flex">
+                            <button type="submit" className="inline-flex items-center justify-center rounded-lg px-4 py-2 transition duration-500 ease-in-out text-white bg-blue-600 hover:bg-blue-700 focus:outline-none mr-2">
+                                <span className="font-bold">Send</span>
+                            </button>
                         </div>
-                    </div>
-                     {isOwnMessage && <img src={avatarSrc || `https://placehold.co/32x32/374151/E5E7EB?text=${avatarText}`} alt={displayName} className="w-8 h-8 rounded-full order-2" />}
+                    </form>
                 </div>
             );
         }
 
-        // --- Profile Modal Component ---
+        // --- Modals ---
+        function CreateRoomModal({ user, services, closeModal }) {
+            const [roomName, setRoomName] = useState('');
+            const [roomType, setRoomType] = useState('public');
+            const [error, setError] = useState('');
+
+            const handleCreateRoom = async (e) => {
+                e.preventDefault();
+                if (roomName.trim().length < 3) {
+                    setError('Room name must be at least 3 characters.');
+                    return;
+                }
+                try {
+                    const roomsPath = `artifacts/${appId}/public/data/rooms`;
+                    const newRoomRef = services.doc(services.collection(services.db, roomsPath));
+                    await services.setDoc(newRoomRef, {
+                        id: newRoomRef.id,
+                        name: roomName.trim(),
+                        type: roomType,
+                        createdBy: user.uid,
+                        createdAt: services.serverTimestamp(),
+                        members: [user.uid]
+                    });
+                    closeModal();
+                } catch (err) {
+                    console.error("Error creating room:", err);
+                    setError("Failed to create room.");
+                }
+            };
+
+            return (
+                <Modal title="Create a New Room" closeModal={closeModal}>
+                    <form onSubmit={handleCreateRoom}>
+                        <div className="mb-4">
+                            <label htmlFor="roomName" className="block text-gray-400 text-sm font-bold mb-2">Room Name</label>
+                            <input id="roomName" type="text" value={roomName} onChange={(e) => setRoomName(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-blue-500" />
+                        </div>
+                        <div className="mb-6">
+                            <label className="block text-gray-400 text-sm font-bold mb-2">Room Type</label>
+                            <div className="flex space-x-4">
+                                <button type="button" onClick={() => setRoomType('public')} className={`flex-1 p-3 rounded-md border ${roomType === 'public' ? 'bg-blue-600 border-blue-500' : 'bg-gray-700 border-gray-600 hover:bg-gray-600'}`}>Public</button>
+                                <button type="button" onClick={() => setRoomType('private')} className={`flex-1 p-3 rounded-md border ${roomType === 'private' ? 'bg-blue-600 border-blue-500' : 'bg-gray-700 border-gray-600 hover:bg-gray-600'}`}>Private</button>
+                            </div>
+                        </div>
+                        {error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}
+                        <div className="flex justify-end space-x-4">
+                            <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
+                            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Create</button>
+                        </div>
+                    </form>
+                </Modal>
+            );
+        }
+
+        function JoinRoomModal({ user, services, closeModal }) {
+             const [roomId, setRoomId] = useState('');
+             const [error, setError] = useState('');
+             const [success, setSuccess] = useState('');
+            
+            const handleJoin = async (e) => {
+                e.preventDefault();
+                setError('');
+                setSuccess('');
+                const trimmedRoomId = roomId.trim();
+                if (trimmedRoomId === '') return;
+
+                const roomRef = services.doc(services.db, `artifacts/${appId}/public/data/rooms`, trimmedRoomId);
+                
+                try {
+                   const docSnap = await services.getDoc(roomRef);
+                   
+                   if (docSnap.exists()) {
+                       const roomData = docSnap.data();
+                       if (roomData.type === 'private') {
+                           await services.updateDoc(roomRef, {
+                               members: services.arrayUnion(user.uid)
+                           });
+                           setSuccess(`Successfully joined room!`);
+                           setTimeout(closeModal, 1500);
+                       } else {
+                           setError("This is a public room and can be joined from the sidebar.");
+                       }
+                   } else {
+                       setError("No room found with this ID. Hint: The ID is a long string of random characters, not the room name. Click the 'Copy ID' badge in a private room to get its ID.");
+                   }
+                } catch(err) {
+                    console.error("Error joining room: ", err);
+                    setError("An error occurred while trying to join the room.");
+                }
+            }
+
+             return (
+                 <Modal title="Join a Private Room" closeModal={closeModal}>
+                     <form onSubmit={handleJoin}>
+                        <label htmlFor="roomId" className="block text-gray-400 text-sm font-bold mb-2">Enter Room ID</label>
+                        <input id="roomId" type="text" value={roomId} onChange={(e) => setRoomId(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-blue-500" />
+                        {error && <p className="text-red-400 text-sm text-center my-4">{error}</p>}
+                        {success && <p className="text-green-400 text-sm text-center my-4">{success}</p>}
+                        <div className="flex justify-end space-x-4 mt-6">
+                            <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
+                            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Join</button>
+                        </div>
+                     </form>
+                 </Modal>
+            )
+        }
+
+        function AddFriendModal({ user, services, closeModal }) {
+             const [friendId, setFriendId] = useState('');
+             const [error, setError] = useState('');
+             const [success, setSuccess] = useState('');
+            
+            const handleAddFriend = async (e) => {
+                e.preventDefault();
+                setError('');
+                setSuccess('');
+                const id = friendId.trim();
+                if (id === '' || id === user.uid) {
+                    setError("Please enter a valid User ID.");
+                    return;
+                }
+                
+                const usersPath = `artifacts/${appId}/public/data/users`;
+                const friendQuery = services.query(services.collection(services.db, usersPath), services.where('uid', '==', id));
+                const friendSnap = await services.getDocs(friendQuery);
+                
+                if (friendSnap.empty) {
+                    setError("User not found.");
+                    return;
+                }
+
+                const userDocRef = services.doc(services.db, usersPath, user.uid);
+                await services.updateDoc(userDocRef, {
+                    friends: services.arrayUnion(id)
+                });
+                setSuccess("Friend added successfully!");
+                setTimeout(closeModal, 1500);
+            }
+
+             return (
+                 <Modal title="Add a Friend" closeModal={closeModal}>
+                     <p className="text-sm text-gray-400 mb-4">Enter your friend's unique User ID to add them to your friend list.</p>
+                     <form onSubmit={handleAddFriend}>
+                        <label htmlFor="friendId" className="block text-gray-400 text-sm font-bold mb-2">User ID</label>
+                        <input id="friendId" type="text" value={friendId} onChange={(e) => setFriendId(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-blue-500" />
+                        {error && <p className="text-red-400 text-sm text-center my-4">{error}</p>}
+                        {success && <p className="text-green-400 text-sm text-center my-4">{success}</p>}
+                        <div className="flex justify-end space-x-4 mt-6">
+                            <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
+                            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Add Friend</button>
+                        </div>
+                     </form>
+                 </Modal>
+            )
+        }
+
         function ProfileModal({ user, services, closeModal }) {
             const { db, storage } = services;
             const [displayName, setDisplayName] = useState(user.displayName || '');
@@ -392,7 +606,7 @@
                 
                 setError('');
                 setIsUploading(true);
-                const storageRef = services.ref(storage, `profile_pics/${appId}/${user.uid}`);
+                const storageRef = services.ref(storage, `profile_pics/${user.uid}`);
                 
                 try {
                     await services.uploadBytes(storageRef, file);
@@ -408,33 +622,44 @@
             };
 
             return (
+                <Modal title="Edit Profile" closeModal={closeModal}>
+                    <div className="flex flex-col items-center mb-6">
+                         <img src={user.photoURL || `https://placehold.co/96x96/374151/E5E7EB?text=${(displayName || 'U')[0]}`} alt="Profile" className="w-24 h-24 rounded-full mb-4 object-cover" />
+                         <input type="file" accept="image/*" ref={profilePicInputRef} onChange={handleProfilePicChange} className="hidden" />
+                         <button onClick={() => profilePicInputRef.current.click()} disabled={isUploading} className="bg-gray-700 hover:bg-gray-600 text-white text-sm py-1 px-3 rounded-md disabled:opacity-50">
+                             {isUploading ? 'Uploading...' : 'Change Picture'}
+                         </button>
+                    </div>
+                    {error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}
+                    <form onSubmit={handleUpdateProfile}>
+                        <div className="mb-4">
+                            <label htmlFor="displayName" className="block text-gray-400 text-sm font-bold mb-2">Display Name</label>
+                            <input
+                                id="displayName"
+                                type="text"
+                                value={displayName}
+                                onChange={(e) => setDisplayName(e.target.value)}
+                                className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-blue-500"
+                            />
+                        </div>
+                        <div className="flex items-center justify-end space-x-4">
+                             <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
+                             <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none">Save</button>
+                        </div>
+                    </form>
+                </Modal>
+            );
+        }
+
+        function Modal({ title, children, closeModal }) {
+             return (
                 <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
                     <div className="bg-gray-800 rounded-lg p-8 w-full max-w-md mx-4">
-                        <h2 className="text-2xl font-bold text-white mb-6">Edit Profile</h2>
-                        <div className="flex flex-col items-center mb-6">
-                             <img src={user.photoURL || `https://placehold.co/96x96/374151/E5E7EB?text=${(displayName || 'U')[0]}`} alt="Profile" className="w-24 h-24 rounded-full mb-4 object-cover" />
-                             <input type="file" accept="image/*" ref={profilePicInputRef} onChange={handleProfilePicChange} className="hidden" />
-                             <button onClick={() => profilePicInputRef.current.click()} disabled={isUploading} className="bg-gray-700 hover:bg-gray-600 text-white text-sm py-1 px-3 rounded-md disabled:opacity-50">
-                                 {isUploading ? 'Uploading...' : 'Change Picture'}
-                             </button>
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold text-white">{title}</h2>
+                            <button onClick={closeModal} className="text-gray-400 hover:text-white">&times;</button>
                         </div>
-                        {error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}
-                        <form onSubmit={handleUpdateProfile}>
-                            <div className="mb-4">
-                                <label htmlFor="displayName" className="block text-gray-400 text-sm font-bold mb-2">Display Name</label>
-                                <input
-                                    id="displayName"
-                                    type="text"
-                                    value={displayName}
-                                    onChange={(e) => setDisplayName(e.target.value)}
-                                    className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-blue-500"
-                                />
-                            </div>
-                            <div className="flex items-center justify-end space-x-4">
-                                 <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
-                                 <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none">Save</button>
-                            </div>
-                        </form>
+                        {children}
                     </div>
                 </div>
             );
