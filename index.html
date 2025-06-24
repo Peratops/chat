@@ -330,8 +330,8 @@
                     {isOpen && <div onClick={() => setIsOpen(false)} className="fixed inset-0 bg-black/50 z-20 md:hidden"></div>}
                     <aside className={`sidebar fixed top-0 left-0 h-full w-64 bg-gray-900 border-r border-gray-700 flex-shrink-0 z-30 flex flex-col transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0`}>
                         <div className="flex-shrink-0 px-4 py-3 border-b border-gray-700 flex justify-between items-center">
-                             <div className="w-full">
-                                <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJkAAAAqCAYAAACgAvlhAAAACXBIWXMAAA7DAAAOwwHHb6hkAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAAwtJREFUeJzt3E9IFVEUx/Gv0zO1wP5AQSSCLQoiqbcpglq1CYO2uYgKo3YFIS0iiMI2EbUoMmhRUBC0KmpVREG0qiiRElqoEAT94VkaWlF2WtwZnBmePntv7p1mPB+44L2MnMPw05l5oxcRwR/LRKRHRAZE5Lu41xXqJRi9sWM6yhxja7THaj+ucHyDiBwSkeciMlrLiZiFkog8EZHdIlI3TT8XLfdQzoiI9IlIt4gsDHopYBSBu0ALqhrLgXvARkf1lgJb/dEJ7ALGHdWeyRJ/rAe6gJ3AoOcv3kEDVi0PuIm7gMXtAC6lVHsmazG5WlAADgOtsQO++MOlb47rJWU7sC22NgF8sFizBZgfmu8FzgP9obUSMGSxh3JWAg2h+TpgDyLyJnZdPSrJ3dfUOrJwT3YtdtwNMfdnNntr9vsJO+3w3Ew3PBE5F+vrtQe0hZI3Apx1Gf0cWBWbnwR+Wq45Bpyq0Eca/gAnAAmttXpAU2ghq5esNDXF5q7O4WiFPtIyDkyG5mNeWp2ouUNDpqzTkCnrNGTKOg2Zsk5DpqzTkCnrNGTKukLlQ/4rx4B9jmotclQn97IWsi1pN6D+nV4ulXVZ+02WBW+JviC2ZZ6DGonIWsiOA88c1WoDrlTxfYuTbiTrshayPuCho1rtjurkXtZClgVfcXe5bHZQp2YasuStAT45qFMEXjqoUzN9ulTWaciUdRoyZZ2GTFmnIVPWeUQft+vSakTll0f0cXsFZl8HpRJTAF5h/tUeoB64D/RiPlR06QUw7LimcqAAXGYqZAAbqO6dXa32oyHLi9VM3Xr99jBbRl1Nrx+VQ8OYzV6GgHfB0+VBoAf4kVZXKr+Cd5eTmI0yLgAdmM07Gh330l9m7QFmc5HAoKNeAD4DZ0Lz6bZhug48Cs0nrHUU9ZFofwOO6s5GN1PZKtWJuPiDATWHtBH9gezUD2NV0jaFvr4N3NKQqaQF25q+Bw6AvlZSydsM/MJsmFwCDZlKVj1m5+sjwNNgUUOmklTE3IdFduPWkKkkNeLfh4X9BboZZUSU9g5jAAAAAElFTkSuQmCC" alt="Company Chat Pro Logo" className="h-auto w-full max-h-8"/>
+                             <div>
+                                <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJkAAAAqCAYAAACgAvlhAAAACXBIWXMAAA7DAAAOwwHHb6hkAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAAwtJREFUeJzt3E9IFVEUx/Gv0zO1wP5AQSSCLQoiqbcpglq1CYO2uYgKo3YFIS0iiMI2EbUoMmhRUBC0KmpVREG0qiiRElqoEAT94VkaWlF2WtwZnBmePntv7p1mPB+44L2MnMPw05l5oxcRwR/LRKRHRAZE5Lu41xXqJRi9sWM6yhxja7THaj+ucHyDiBwSkeciMlrLiZiFkog8EZHdIlI3TT8XLfdQzoiI9IlIt4gsDHopYBSBu0ALqhrLgXvARkf1lgJb/dEJ7ALGHdWeyRJ/rAe6gJ3AoOcv3kEDVi0PuIm7gMXtAC6lVHsmazG5WlAADgOtsQO++MOlb47rJWU7sC22NgF8sFizBZgfmu8FzgP9obUSMGSxh3JWAg2h+TpgDyLyJnZdPSrJ3dfUOrJwT3YtdtwNMfdnNntr9vsJO+3w3Ew3PBE5F+vrtQe0hZI3Apx1Gf0cWBWbnwR+Wq45Bpyq0Eca/gAnAAmttXpAU2ghq5esNDXF5q7O4WiFPtIyDkyG5mNeWp2ouUNDpqzTkCnrNGTKOg2Zsk5DpqzTkCnrNGTKukLlQ/4rx4B9jmotclQn97IWsi1pN6D+nV4ulXVZ+02WBW+JviC2ZZ6DGonIWsiOA88c1WoDrlTxfYuTbiTrshayPuCho1rtjurkXtZClgVfcXe5bHZQp2YasuStAT45qFMEXjqoUzN9ulTWaciUdRoyZZ2GTFmnIVPWeUQft+vSakTll0f0cXsFZl8HpRJTAF5h/tUeoB64D/RiPlR06QUw7LimcqAAXGYqZAAbqO6dXa32oyHLi9VM3Xr99jBbRl1Nrx+VQ8OYzV6GgHfB0+VBoAf4kVZXKr+Cd5eTmI0yLgAdmM07Gh330l9m7QFmc5HAoKNeAD4DZ0Lz6bZhug48Cs0nrHUU9ZFofwOO6s5GN1PZKtWJuPiDATWHtBH9gezUD2NV0jaFvr4N3NKQqaQF25q+Bw6AvlZSydsM/MJsmFwCDZlKVj1m5+sjwNNgUUOmklTE3IdFduPWkKkkNeLfh4X9BboZZUSU9g5jAAAAAElFTkSuQmCC" alt="Company Chat Pro Logo" className="h-8"/>
                                 <div className="text-xs text-gray-400 mt-2 flex items-center">
                                     <span>Code: {user.friendCode}</span>
                                     <button onClick={copyFriendCode} className="ml-2 p-1 bg-gray-700 rounded hover:bg-gray-600">
@@ -356,7 +356,7 @@
                             <button onClick={() => setShowJoinRoomModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Join Group</button>
                             <button onClick={() => setShowAddFriendModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Add Friend</button>
                             <button onClick={() => setShowProfileModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Edit Profile</button>
-                             <p className="text-xs text-gray-500 text-center mt-2">v 3.0</p>
+                             <p className="text-xs text-gray-500 text-center mt-2">v 1.0</p>
                         </div>
                         
                         {showCreateRoomModal && <CreateRoomModal user={user} services={services} closeModal={() => setShowCreateRoomModal(false)} />}
@@ -496,34 +496,36 @@
             }, [activeRoom]);
 
             useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-            
+
+            const WelcomeContent = () => (
+                 <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                    <div>
+                        <h2 className="text-2xl font-bold">Welcome</h2>
+                        <p className="text-gray-400 mt-2">Select a room or a friend to start chatting.</p>
+                    </div>
+                </div>
+            );
+
+            const ChatContent = () => (
+                <React.Fragment>
+                    <div className="flex-1 p-4 sm:p-6 overflow-y-auto">{messages.map(msg => (msg.type === 'system' ? <SystemMessage key={msg.id} text={msg.text} /> : <MessageBubble key={msg.id} message={msg} isOwnMessage={msg.uid === user.uid} onReply={setReplyTo} />))}<div ref={messagesEndRef} /></div>
+                    <MessageInput user={user} services={services} activeRoom={activeRoom} replyTo={replyTo} setReplyTo={setReplyTo} />
+                </React.Fragment>
+            );
+
             return (
-                <main className="main-chat-area flex-1 flex flex-col h-screen">
-                    <header className="flex-shrink-0 bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 p-3 flex items-center justify-between z-10">
+                <main className="main-chat-area flex-1 min-w-0 h-full">
+                    <header className="flex-shrink-0 bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 p-3 flex items-center justify-between z-10 sticky top-0">
                         <div className="flex items-center min-w-0">
                              <button onClick={() => setIsSidebarOpen(true)} className="p-1 text-gray-400 hover:text-white mr-2 md:hidden">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
                              </button>
                             <h2 className="text-xl font-semibold truncate">
-                                {activeRoom ? `# ${getDmName(activeRoom)}` : 'Welcome'}
+                                {activeRoom ? `# ${getDmName(activeRoom)}` : 'Home'}
                             </h2>
                         </div>
                     </header>
-                    
-                    <div className="flex-1 min-h-0 p-4 sm:p-6 overflow-y-auto">
-                        {!activeRoom && (
-                             <div className="flex h-full flex-col items-center justify-center text-center p-4">
-                                <div>
-                                    <h2 className="text-2xl font-bold">Welcome</h2>
-                                    <p className="text-gray-400 mt-2">Select a room or a friend to start chatting.</p>
-                                </div>
-                            </div>
-                        )}
-                        {activeRoom && messages.map(msg => (msg.type === 'system' ? <SystemMessage key={msg.id} text={msg.text} /> : <MessageBubble key={msg.id} message={msg} isOwnMessage={msg.uid === user.uid} onReply={setReplyTo} />))}
-                        {activeRoom && <div ref={messagesEndRef} />}
-                    </div>
-                    
-                    {activeRoom && <MessageInput user={user} services={services} activeRoom={activeRoom} replyTo={replyTo} setReplyTo={setReplyTo} />}
+                    {activeRoom ? <ChatContent /> : <WelcomeContent />}
                 </main>
             );
         }
