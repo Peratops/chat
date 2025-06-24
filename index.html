@@ -476,11 +476,13 @@
             const [messages, setMessages] = useState([]);
             const [replyTo, setReplyTo] = useState(null);
             const messagesEndRef = useRef(null);
+
             const getDmName = (room) => {
                 if (!room?.isDM || !room.members || !user) return room?.name;
                 const otherUserId = room.members.find(uid => uid !== user.uid);
                 return room.memberDetails?.[otherUserId]?.displayName || room.name;
             }
+
             useEffect(() => {
                 if (!activeRoom) { setMessages([]); return; }
                 setReplyTo(null);
@@ -491,25 +493,38 @@
                 });
                 return unsubscribe;
             }, [activeRoom]);
+
             useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-            if (!activeRoom) {
-                return (
-                    <div className="flex-1 flex flex-col items-center justify-center text-center p-4 relative">
-                        <button onClick={() => setIsSidebarOpen(true)} className="absolute top-4 left-4 z-20 p-2 bg-gray-800 rounded-md text-white hover:bg-gray-700 md:hidden"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg></button>
-                        <div><h2 className="text-2xl font-bold">Welcome to Chat Pro</h2><p className="text-gray-400 mt-2">Select a room or a friend to start chatting.</p></div>
+
+            const WelcomeContent = () => (
+                 <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                    <div>
+                        <h2 className="text-2xl font-bold">Welcome</h2>
+                        <p className="text-gray-400 mt-2">Select a room or a friend to start chatting.</p>
                     </div>
-                );
-            }
+                </div>
+            );
+
+            const ChatContent = () => (
+                <React.Fragment>
+                    <div className="flex-1 p-4 sm:p-6 overflow-y-auto">{messages.map(msg => (msg.type === 'system' ? <SystemMessage key={msg.id} text={msg.text} /> : <MessageBubble key={msg.id} message={msg} isOwnMessage={msg.uid === user.uid} onReply={setReplyTo} />))}<div ref={messagesEndRef} /></div>
+                    <MessageInput user={user} services={services} activeRoom={activeRoom} replyTo={replyTo} setReplyTo={setReplyTo} />
+                </React.Fragment>
+            );
+
             return (
                 <main className="main-chat-area flex-1 min-w-0 h-full">
                     <header className="flex-shrink-0 bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 p-3 flex items-center justify-between z-10">
                         <div className="flex items-center min-w-0">
-                             <button onClick={() => setIsSidebarOpen(true)} className="p-1 text-gray-400 hover:text-white mr-2 md:hidden"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg></button>
-                            <h2 className="text-xl font-semibold truncate"># {activeRoom.isDM ? getDmName(activeRoom) : activeRoom.name}</h2>
+                             <button onClick={() => setIsSidebarOpen(true)} className="p-1 text-gray-400 hover:text-white mr-2 md:hidden">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+                             </button>
+                            <h2 className="text-xl font-semibold truncate">
+                                {activeRoom ? `# ${getDmName(activeRoom)}` : 'Home'}
+                            </h2>
                         </div>
                     </header>
-                    <div className="flex-1 p-4 sm:p-6 overflow-y-auto">{messages.map(msg => (msg.type === 'system' ? <SystemMessage key={msg.id} text={msg.text} /> : <MessageBubble key={msg.id} message={msg} isOwnMessage={msg.uid === user.uid} onReply={setReplyTo} />))}<div ref={messagesEndRef} /></div>
-                    <MessageInput user={user} services={services} activeRoom={activeRoom} replyTo={replyTo} setReplyTo={setReplyTo} />
+                    {activeRoom ? <ChatContent /> : <WelcomeContent />}
                 </main>
             );
         }
