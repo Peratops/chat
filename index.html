@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Company Chat Pro</title>
     
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💬</text></svg>">
+    
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -19,10 +22,21 @@
         ::-webkit-scrollbar-track { background: #1f2937; }
         ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
-        .sidebar { transition: width 0.3s ease-in-out; }
+        .sidebar { transition: transform 0.3s ease-in-out; }
+        .notification-popup {
+            animation: slideIn 0.5s ease-out forwards, fadeOut 0.5s ease-in 4.5s forwards;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
     </style>
 </head>
-<body class="bg-gray-900">
+<body class="bg-gray-900 overflow-hidden">
     <div id="root"></div>
 
     <!-- React Libraries -->
@@ -36,13 +50,13 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, setDoc, query, updateDoc, where, getDocs, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, setDoc, query, updateDoc, where, getDocs, arrayUnion, getDoc, writeBatch, deleteDoc, limit, orderBy, arrayRemove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         window.firebaseServices = {
             initializeApp,
             getAuth, signInAnonymously, onAuthStateChanged,
-            getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, setDoc, query, updateDoc, where, getDocs, arrayUnion, getDoc,
+            getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, setDoc, query, updateDoc, where, getDocs, arrayUnion, getDoc, writeBatch, deleteDoc, limit, orderBy, arrayRemove,
             getStorage, ref, uploadBytes, getDownloadURL
         };
     </script>
@@ -52,7 +66,6 @@
         const { useState, useEffect, useRef } = React;
         
         // --- Firebase Configuration ---
-        // This is the configuration for YOUR Firebase project.
         const firebaseConfig = {
             apiKey: "AIzaSyCcqfbDluQqNBDCElYzVOg3pBV5bG46Sjc",
             authDomain: "chat-39642.firebaseapp.com",
@@ -64,7 +77,7 @@
             measurementId: "G-DB1WNLYV81"
         };
 
-        const appId = 'company-chat-v1'; // Unique identifier for your app's data
+        const appId = 'company-chat-v1';
 
         function App() {
             const [services, setServices] = useState(null);
@@ -132,13 +145,11 @@
             return <ChatLayout user={user} services={services} />;
         }
         
-        // --- Components ---
-
         function LoadingScreen() {
             return (
                 <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
                     <div className="text-center">
-                        <svg className="animate-spin h-10 w-10 text-blue-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <svg className="animate-spin h-10 w-10 text-purple-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                         <p className="text-xl">Connecting to Secure Chat...</p>
                     </div>
                 </div>
@@ -157,11 +168,50 @@
         }
 
         function ChatLayout({ user, services }) {
-            const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+            const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
             const [activeRoom, setActiveRoom] = useState(null);
+            const [notification, setNotification] = useState(null);
+
+            useEffect(() => {
+                const handleResize = () => {
+                    if (window.innerWidth >= 768) {
+                        setIsSidebarOpen(true);
+                    } else {
+                        setIsSidebarOpen(false);
+                    }
+                };
+                window.addEventListener('resize', handleResize);
+                return () => window.removeEventListener('resize', handleResize);
+            }, []);
+
+            useEffect(() => {
+                const handleHashChange = async () => {
+                    if (window.location.hash.startsWith('#room=')) {
+                        const roomId = window.location.hash.substring(6);
+                        if (roomId) {
+                            const roomRef = services.doc(services.db, `artifacts/${appId}/public/data/rooms`, roomId);
+                            const docSnap = await services.getDoc(roomRef);
+
+                            if (docSnap.exists()) {
+                                await services.updateDoc(roomRef, {
+                                    members: services.arrayUnion(user.uid)
+                                });
+                                setActiveRoom({ id: docSnap.id, ...docSnap.data() });
+                                
+                                window.history.pushState("", document.title, window.location.pathname + window.location.search);
+                            } else {
+                                alert("The room from the link could not be found.");
+                            }
+                        }
+                    }
+                };
+                handleHashChange();
+            }, [user, services]);
+
 
             return (
-                <div className="flex h-screen antialiased text-gray-200 bg-gray-900">
+                <div className="flex h-screen antialiased text-gray-200 bg-gray-900 relative">
+                    {notification && <NotificationPopup notification={notification} setNotification={setNotification} setActiveRoom={setActiveRoom} />}
                     <Sidebar 
                         user={user} 
                         services={services} 
@@ -169,11 +219,13 @@
                         setIsOpen={setIsSidebarOpen} 
                         setActiveRoom={setActiveRoom}
                         activeRoomId={activeRoom?.id}
+                        setNotification={setNotification}
                     />
                     <MainChatArea 
                         user={user} 
                         services={services} 
                         activeRoom={activeRoom}
+                        setActiveRoom={setActiveRoom}
                         isSidebarOpen={isSidebarOpen}
                         setIsSidebarOpen={setIsSidebarOpen}
                     />
@@ -181,13 +233,48 @@
             );
         }
 
-        function Sidebar({ user, services, isOpen, setIsOpen, setActiveRoom, activeRoomId }) {
+        function Sidebar({ user, services, isOpen, setIsOpen, setActiveRoom, activeRoomId, setNotification }) {
             const [rooms, setRooms] = useState([]);
             const [friends, setFriends] = useState([]);
+            const [friendRequests, setFriendRequests] = useState([]);
             const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
             const [showJoinRoomModal, setShowJoinRoomModal] = useState(false);
             const [showAddFriendModal, setShowAddFriendModal] = useState(false);
             const [showProfileModal, setShowProfileModal] = useState(false);
+            
+            const dmRooms = rooms.filter(r => r.isDM);
+
+            // Notification listener for new DM messages
+            useEffect(() => {
+                const unsubscribers = dmRooms.map(room => {
+                    if (room.id === activeRoomId) return null;
+
+                    const messagesPath = `artifacts/${appId}/public/data/rooms/${room.id}/messages`;
+                    const q = services.query(services.collection(services.db, messagesPath), services.orderBy('createdAt', 'desc'), services.limit(1));
+                    
+                    return services.onSnapshot(q, (snapshot) => {
+                        snapshot.docChanges().forEach((change) => {
+                            if (change.type === 'added') {
+                                const message = change.doc.data();
+                                if (message.uid !== user.uid) { 
+                                    const timeSince = Date.now() - (message.createdAt?.toMillis() || 0);
+                                    if(timeSince < 5000) { 
+                                         setNotification({
+                                            from: message.displayName,
+                                            text: message.text,
+                                            photoURL: message.photoURL,
+                                            room: room
+                                        });
+                                    }
+                                }
+                            }
+                        });
+                    });
+                });
+
+                return () => unsubscribers.forEach(unsub => unsub && unsub());
+
+            }, [dmRooms, activeRoomId, user.uid]);
 
             useEffect(() => {
                 const roomsPath = `artifacts/${appId}/public/data/rooms`;
@@ -211,98 +298,279 @@
                 return unsubscribe;
             }, [user.friends]);
 
-            const publicRooms = rooms.filter(r => r.type === 'public');
-            const privateRooms = rooms.filter(r => r.type === 'private');
+            useEffect(() => {
+                const requestsPath = `artifacts/${appId}/public/data/users/${user.uid}/friendRequests`;
+                const q = services.query(services.collection(services.db, requestsPath), services.where('status', '==', 'pending'));
+                const unsubscribe = services.onSnapshot(q, (snapshot) => {
+                    setFriendRequests(snapshot.docs.map(d => ({id: d.id, ...d.data()})));
+                });
+                return unsubscribe;
+            }, [user.uid]);
+
+            const groupChats = rooms.filter(r => !r.isDM);
 
             const handleRoomSelect = (room) => {
                 setActiveRoom(room);
                 if(window.innerWidth < 768) setIsOpen(false);
             }
             
-            if (!isOpen) {
-                return (
-                     <button onClick={() => setIsOpen(true)} className="absolute top-4 left-4 z-20 p-2 bg-gray-800 rounded-md text-white hover:bg-gray-700">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
-                    </button>
-                )
-            }
+            return (
+                <React.Fragment>
+                    {isOpen && <div onClick={() => setIsOpen(false)} className="fixed inset-0 bg-black/50 z-20 md:hidden"></div>}
+                    <aside className={`sidebar fixed top-0 left-0 h-full w-64 bg-gray-900 border-r border-gray-700 flex-shrink-0 z-30 flex flex-col transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0`}>
+                        <div className="flex-shrink-0 px-4 py-3 border-b border-gray-700 flex justify-between items-center">
+                             <div>
+                                <h1 className="text-xl font-bold text-white">Chat Pro</h1>
+                                <p className="text-xs text-gray-400 mt-1 truncate" title={user.uid}>ID: {user.uid}</p>
+                             </div>
+                             <button onClick={() => setIsOpen(false)} className="p-1 text-gray-400 hover:text-white md:hidden">
+                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                             </button>
+                        </div>
+
+                        <div className="flex-grow p-4 overflow-y-auto">
+                            {friendRequests.length > 0 && <Notifications requests={friendRequests} user={user} services={services} />}
+                            <RoomList title="Direct Messages" rooms={dmRooms} onSelect={handleRoomSelect} activeRoomId={activeRoomId} user={user} setActiveRoom={setActiveRoom} services={services} />
+                            <RoomList title="Group Chats" rooms={groupChats} onSelect={handleRoomSelect} activeRoomId={activeRoomId} user={user} setActiveRoom={setActiveRoom} services={services} />
+                            <FriendList friends={friends} user={user} services={services} setActiveRoom={setActiveRoom} />
+                        </div>
+
+                        <div className="flex-shrink-0 p-2 border-t border-gray-700">
+                            <button onClick={() => setShowCreateRoomModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Create Group</button>
+                            <button onClick={() => setShowJoinRoomModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Join Group</button>
+                            <button onClick={() => setShowAddFriendModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Add Friend</button>
+                            <button onClick={() => setShowProfileModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Edit Profile</button>
+                        </div>
+                        
+                        {showCreateRoomModal && <CreateRoomModal user={user} services={services} closeModal={() => setShowCreateRoomModal(false)} />}
+                        {showJoinRoomModal && <JoinRoomModal user={user} services={services} closeModal={() => setShowJoinRoomModal(false)} />}
+                        {showAddFriendModal && <AddFriendModal user={user} services={services} closeModal={() => setShowAddFriendModal(false)} />}
+                        {showProfileModal && <ProfileModal user={user} services={services} closeModal={() => setShowProfileModal(false)} />}
+                    </aside>
+                </React.Fragment>
+            );
+        }
+        
+        function NotificationPopup({ notification, setNotification, setActiveRoom }) {
+            const { from, text, photoURL, room } = notification;
+
+            useEffect(() => {
+                const timer = setTimeout(() => {
+                    setNotification(null);
+                }, 5000);
+                return () => clearTimeout(timer);
+            }, [notification]);
+
+            const handleClick = () => {
+                setActiveRoom(room);
+                setNotification(null);
+            };
 
             return (
-                <aside className="sidebar flex flex-col bg-gray-900 border-r border-gray-700 flex-shrink-0" style={{width: isOpen ? '256px' : '0px'}}>
-                    <div className="flex-shrink-0 px-4 py-3 border-b border-gray-700 flex justify-between items-center">
-                         <div>
-                            <h1 className="text-xl font-bold text-white">Chat Pro</h1>
-                            <p className="text-xs text-gray-400 mt-1 truncate" title={user.uid}>ID: {user.uid}</p>
-                         </div>
-                         <button onClick={() => setIsOpen(false)} className="p-1 text-gray-400 hover:text-white">
-                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
-                         </button>
+                <div 
+                    className="notification-popup fixed top-5 right-5 max-w-sm w-full bg-gray-800 shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden z-50 cursor-pointer"
+                    onClick={handleClick}
+                >
+                    <div className="p-4">
+                        <div className="flex items-start">
+                            <div className="flex-shrink-0">
+                                <img className="h-10 w-10 rounded-full" src={photoURL || `https://placehold.co/40x40/374151/E5E7EB?text=${from[0]}`} alt="" />
+                            </div>
+                            <div className="ml-3 w-0 flex-1 pt-0.5">
+                                <p className="text-sm font-medium text-white">{from}</p>
+                                <p className="mt-1 text-sm text-gray-400 truncate">{text}</p>
+                            </div>
+                        </div>
                     </div>
-
-                    <div className="flex-grow p-4 overflow-y-auto">
-                        <RoomList title="Public Rooms" rooms={publicRooms} onSelect={handleRoomSelect} activeRoomId={activeRoomId} />
-                        <RoomList title="Private Rooms" rooms={privateRooms} onSelect={handleRoomSelect} activeRoomId={activeRoomId} />
-                        <FriendList friends={friends} />
-                    </div>
-
-                    <div className="flex-shrink-0 p-2 border-t border-gray-700">
-                        <button onClick={() => setShowCreateRoomModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Create Room</button>
-                        <button onClick={() => setShowJoinRoomModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Join Room</button>
-                        <button onClick={() => setShowAddFriendModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Add Friend</button>
-                        <button onClick={() => setShowProfileModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Edit Profile</button>
-                    </div>
-                    
-                    {showCreateRoomModal && <CreateRoomModal user={user} services={services} closeModal={() => setShowCreateRoomModal(false)} />}
-                    {showJoinRoomModal && <JoinRoomModal user={user} services={services} closeModal={() => setShowJoinRoomModal(false)} />}
-                    {showAddFriendModal && <AddFriendModal user={user} services={services} closeModal={() => setShowAddFriendModal(false)} />}
-                    {showProfileModal && <ProfileModal user={user} services={services} closeModal={() => setShowProfileModal(false)} />}
-                </aside>
+                </div>
             );
         }
 
-        function RoomList({ title, rooms, onSelect, activeRoomId }) {
+
+        function Notifications({requests, user, services}) {
+            const handleRequest = async (requestId, fromId, accept = false) => {
+                const batch = services.writeBatch(services.db);
+                const requestRef = services.doc(services.db, `artifacts/${appId}/public/data/users/${user.uid}/friendRequests`, requestId);
+
+                if (accept) {
+                    const userRef = services.doc(services.db, `artifacts/${appId}/public/data/users`, user.uid);
+                    const friendRef = services.doc(services.db, `artifacts/${appId}/public/data/users`, fromId);
+                    
+                    batch.update(userRef, { friends: services.arrayUnion(fromId) });
+                    batch.update(friendRef, { friends: services.arrayUnion(user.uid) });
+                }
+                batch.delete(requestRef);
+                await batch.commit();
+            };
+
             return (
                 <div className="mb-4">
-                    <h2 className="text-sm font-semibold text-gray-400 mb-2 px-2">{title}</h2>
+                    <h2 className="text-sm font-semibold text-gray-400 mb-2 px-2">Friend Requests</h2>
                     <ul>
-                        {rooms.map(room => (
-                            <li key={room.id} onClick={() => onSelect(room)} className={`p-2 rounded-md cursor-pointer text-sm ${activeRoomId === room.id ? 'bg-blue-900/70' : 'hover:bg-gray-700/50'}`}>
-                                # {room.name}
+                        {requests.map(req => (
+                            <li key={req.id} className="p-2 rounded-md bg-gray-800 mb-2">
+                                <p className="text-sm">{req.displayName} wants to be your friend.</p>
+                                <div className="flex justify-end space-x-2 mt-2">
+                                    <button onClick={() => handleRequest(req.id, req.from, true)} className="text-xs bg-green-600 hover:bg-green-700 px-2 py-1 rounded">Accept</button>
+                                    <button onClick={() => handleRequest(req.id, req.from, false)} className="text-xs bg-red-600 hover:bg-red-700 px-2 py-1 rounded">Decline</button>
+                                </div>
                             </li>
                         ))}
                     </ul>
                 </div>
             )
         }
+
+        function RoomList({ title, rooms, onSelect, activeRoomId, user, services, setActiveRoom }) {
+            const [contextMenu, setContextMenu] = useState({visible: false, x: 0, y: 0, room: null});
+
+            const getDmName = (room) => {
+                if (!room.isDM || !room.members || !user) return room.name;
+                const otherUserId = room.members.find(uid => uid !== user.uid);
+                return room.memberDetails?.[otherUserId]?.displayName || room.name;
+            }
+
+            const handleRightClick = (e, room) => {
+                e.preventDefault();
+                setContextMenu({ visible: true, x: e.clientX, y: e.clientY, room });
+            }
+
+            const closeContextMenu = () => setContextMenu({visible: false, x:0, y:0, room: null});
+            
+            useEffect(() => {
+                document.addEventListener('click', closeContextMenu);
+                return () => document.removeEventListener('click', closeContextMenu);
+            }, []);
+
+            const handleLeaveRoom = async (room) => {
+                closeContextMenu();
+                const roomRef = services.doc(services.db, `artifacts/${appId}/public/data/rooms`, room.id);
+                
+                if (room.members.length === 1) {
+                    await services.deleteDoc(roomRef);
+                } else {
+                    await services.updateDoc(roomRef, { members: services.arrayRemove(user.uid) });
+                }
+                setActiveRoom(null);
+            };
+
+            const handleShareLink = (room) => {
+                closeContextMenu();
+                const baseUrl = window.location.href.split('#')[0];
+                const link = `${baseUrl}#room=${room.id}`;
+                navigator.clipboard.writeText(link);
+            };
+
+            return (
+                <div className="mb-4">
+                    <h2 className="text-sm font-semibold text-gray-400 mb-2 px-2">{title}</h2>
+                    <ul>
+                        {rooms.map(room => (
+                            <li key={room.id} onClick={() => onSelect(room)} onContextMenu={(e) => handleRightClick(e, room)} className={`p-2 rounded-md cursor-pointer text-sm ${activeRoomId === room.id ? 'bg-blue-900/70' : 'hover:bg-gray-700/50'}`}>
+                                # {room.isDM ? getDmName(room) : room.name}
+                            </li>
+                        ))}
+                    </ul>
+                     {contextMenu.visible && (
+                        <div style={{ top: contextMenu.y, left: contextMenu.x }} className="absolute bg-gray-800 border border-gray-600 rounded-md shadow-lg py-1 z-50">
+                           {!contextMenu.room.isDM && <button onClick={() => handleShareLink(contextMenu.room)} className="block w-full text-left px-4 py-2 text-sm text-white hover:bg-blue-600">Share Link</button>}
+                           <button onClick={() => handleLeaveRoom(contextMenu.room)} className="block w-full text-left px-4 py-2 text-sm text-white hover:bg-blue-600">Leave Room</button>
+                        </div>
+                    )}
+                </div>
+            )
+        }
         
-        function FriendList({ friends }) {
+        function FriendList({ friends, user, services, setActiveRoom }) {
+            const [contextMenu, setContextMenu] = useState({visible: false, x: 0, y: 0, friend: null});
+
+            const handleRightClick = (e, friend) => {
+                e.preventDefault();
+                setContextMenu({ visible: true, x: e.clientX, y: e.clientY, friend });
+            }
+
+            const closeContextMenu = () => setContextMenu({visible: false, x:0, y:0, friend: null});
+
+            const handleDirectMessage = async (friend) => {
+                closeContextMenu();
+                const dmId = [user.uid, friend.uid].sort().join('_');
+                const dmRoomRef = services.doc(services.db, `artifacts/${appId}/public/data/rooms`, `dm_${dmId}`);
+
+                const docSnap = await services.getDoc(dmRoomRef);
+                if (docSnap.exists()) {
+                    setActiveRoom({id: docSnap.id, ...docSnap.data()});
+                } else {
+                    const newRoom = {
+                        id: `dm_${dmId}`,
+                        name: `DM with ${friend.displayName}`,
+                        isDM: true,
+                        type: 'private',
+                        createdBy: user.uid,
+                        createdAt: services.serverTimestamp(),
+                        members: [user.uid, friend.uid],
+                        memberDetails: {
+                            [user.uid]: { displayName: user.displayName, photoURL: user.photoURL },
+                            [friend.uid]: { displayName: friend.displayName, photoURL: friend.photoURL },
+                        }
+                    };
+                    await services.setDoc(dmRoomRef, newRoom);
+                    setActiveRoom(newRoom);
+                }
+            };
+            
+            useEffect(() => {
+                document.addEventListener('click', closeContextMenu);
+                return () => document.removeEventListener('click', closeContextMenu);
+            }, []);
+
             return (
                  <div className="mb-4">
                     <h2 className="text-sm font-semibold text-gray-400 mb-2 px-2">Friends</h2>
                     <ul>
                         {friends.map(friend => (
-                            <li key={friend.uid} className="flex items-center p-2 rounded-md text-sm">
+                            <li key={friend.uid} onContextMenu={(e) => handleRightClick(e, friend)} className="flex items-center p-2 rounded-md text-sm hover:bg-gray-700/50 cursor-pointer">
                                 <span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span>
                                 <img src={friend.photoURL || `https://placehold.co/32x32/374151/E5E7EB?text=${(friend.displayName || 'U')[0]}`} alt={friend.displayName} className="w-6 h-6 rounded-full mr-2" />
                                 {friend.displayName}
                             </li>
                         ))}
                     </ul>
+                    {contextMenu.visible && (
+                        <div style={{ top: contextMenu.y, left: contextMenu.x }} className="absolute bg-gray-800 border border-gray-600 rounded-md shadow-lg py-1 z-50">
+                           <button onClick={() => handleDirectMessage(contextMenu.friend)} className="block w-full text-left px-4 py-2 text-sm text-white hover:bg-blue-600">Direct Message</button>
+                        </div>
+                    )}
                 </div>
             )
         }
 
         function MainChatArea({ user, services, activeRoom, isSidebarOpen, setIsSidebarOpen }) {
             const [messages, setMessages] = useState([]);
-            const [copied, setCopied] = useState(false);
+            const [copiedId, setCopiedId] = useState(false);
+            const [copiedLink, setCopiedLink] = useState(false);
             const messagesEndRef = useRef(null);
 
-            const copyRoomId = () => {
-                if (!activeRoom || !activeRoom.id) return;
-                navigator.clipboard.writeText(activeRoom.id).then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
+            const getDmName = (room) => {
+                if (!room.isDM || !room.members || !user) return room.name;
+                const otherUserId = room.members.find(uid => uid !== user.uid);
+                return room.memberDetails?.[otherUserId]?.displayName || room.name;
+            }
+
+            const copyToClipboard = (text, type) => {
+                navigator.clipboard.writeText(text).then(() => {
+                    if (type === 'id') {
+                        setCopiedId(true);
+                        setTimeout(() => setCopiedId(false), 2000);
+                    } else if (type === 'link') {
+                        setCopiedLink(true);
+                        setTimeout(() => setCopiedLink(false), 2000);
+                    }
                 });
+            };
+            
+            const getShareLink = () => {
+                const baseUrl = window.location.href.split('#')[0];
+                return `${baseUrl}#room=${activeRoom.id}`;
             };
             
             useEffect(() => {
@@ -311,11 +579,9 @@
                     return;
                 }
                 const messagesPath = `artifacts/${appId}/public/data/rooms/${activeRoom.id}/messages`;
-                const q = services.query(services.collection(services.db, messagesPath));
+                const q = services.query(services.collection(services.db, messagesPath), services.orderBy('createdAt'));
                 const unsubscribe = services.onSnapshot(q, (snapshot) => {
-                    const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                    msgs.sort((a, b) => a.createdAt?.seconds - b.createdAt?.seconds);
-                    setMessages(msgs);
+                    setMessages(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
                 return unsubscribe;
             }, [activeRoom]);
@@ -327,9 +593,9 @@
             if (!activeRoom) {
                 return (
                     <div className="flex-1 flex items-center justify-center text-center p-4">
-                        {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="absolute top-4 left-4 z-20 p-2 bg-gray-800 rounded-md text-white hover:bg-gray-700 md:hidden">
+                        <button onClick={() => setIsSidebarOpen(true)} className="absolute top-4 left-4 z-20 p-2 bg-gray-800 rounded-md text-white hover:bg-gray-700 md:hidden">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
-                        </button>}
+                        </button>
                         <div>
                             <h2 className="text-2xl font-bold">Welcome to Chat Pro</h2>
                             <p className="text-gray-400 mt-2">Select a room from the sidebar to start chatting.</p>
@@ -339,16 +605,24 @@
             }
 
             return (
-                <main className="flex flex-col flex-1 min-w-0">
-                    <header className="flex-shrink-0 bg-gray-900 border-b border-gray-700 p-4 flex items-center">
-                        {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-1 text-gray-400 hover:text-white mr-4">
-                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
-                         </button>}
-                        <h2 className="text-xl font-semibold"># {activeRoom.name}</h2>
-                        {activeRoom.type === 'private' && (
-                            <div className="ml-4 text-xs flex items-center bg-gray-700 px-2 py-1 rounded-full cursor-pointer" title="Copy Room ID" onClick={copyRoomId}>
-                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                                {copied ? 'ID Copied!' : 'Copy ID'}
+                <main className="flex flex-col flex-1 min-w-0 h-screen">
+                    <header className="flex-shrink-0 bg-gray-900 border-b border-gray-700 p-3 flex items-center justify-between">
+                        <div className="flex items-center">
+                            <button onClick={() => setIsSidebarOpen(true)} className="p-1 text-gray-400 hover:text-white mr-2 md:hidden">
+                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+                             </button>
+                            <h2 className="text-xl font-semibold"># {activeRoom.isDM ? getDmName(activeRoom) : activeRoom.name}</h2>
+                        </div>
+                        {activeRoom.type === 'private' && !activeRoom.isDM && (
+                            <div className="flex space-x-2">
+                                <button title="Copy Room ID" onClick={() => copyToClipboard(activeRoom.id, 'id')} className="text-xs flex items-center bg-gray-700 px-2 py-1 rounded-full hover:bg-gray-600">
+                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                                    {copiedId ? 'Copied!' : 'Copy ID'}
+                                </button>
+                                <button title="Copy Invite Link" onClick={() => copyToClipboard(getShareLink(), 'link')} className="text-xs flex items-center bg-gray-700 px-2 py-1 rounded-full hover:bg-gray-600">
+                                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899l4-4a4 4 0 000-5.656 4 4 0 00-5.656 0l-4 4"></path></svg>
+                                    {copiedLink ? 'Copied!' : 'Share Link'}
+                                </button>
                             </div>
                         )}
                     </header>
@@ -365,14 +639,13 @@
         
         function MessageBubble({ message, isOwnMessage }) {
             const avatarSrc = message.photoURL || `https://placehold.co/32x32/374151/E5E7EB?text=${(message.displayName || 'U')[0]}`;
-            
             return (
                 <div className={`chat-message flex items-end my-2 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
                     {!isOwnMessage && <img src={avatarSrc} alt={message.displayName} className="w-8 h-8 rounded-full order-1 flex-shrink-0" />}
                     <div className={`flex flex-col space-y-1 text-sm max-w-xs mx-2 ${isOwnMessage ? 'order-1 items-end' : 'order-2 items-start'}`}>
                         <div>
                              {!isOwnMessage && <div className="text-xs text-gray-400 mb-1 px-1">{message.displayName}</div>}
-                            <div className={`px-4 py-2 rounded-lg inline-block ${isOwnMessage ? 'rounded-br-none bg-blue-600 text-white' : 'rounded-bl-none bg-gray-700 text-gray-200'}`}>
+                            <div className={`px-4 py-2 rounded-lg inline-block ${isOwnMessage ? 'rounded-br-none bg-purple-600 text-white' : 'rounded-bl-none bg-gray-700 text-gray-200'}`}>
                                 {message.text}
                             </div>
                         </div>
@@ -383,7 +656,6 @@
         
         function MessageInput({ user, services, activeRoom }) {
              const [newMessage, setNewMessage] = useState('');
-
              const handleSendMessage = async (e) => {
                 e.preventDefault();
                 if (newMessage.trim() === '') return;
@@ -400,20 +672,15 @@
                     setNewMessage('');
                 } catch (error) { console.error("Error sending message: ", error); }
             };
-
             return (
                  <div className="border-t-2 border-gray-700 px-4 pt-4 mb-2 sm:mb-0">
                     <form onSubmit={handleSendMessage} className="relative flex">
-                        <input
-                            type="text"
-                            value={newMessage}
-                            onChange={(e) => setNewMessage(e.target.value)}
-                            placeholder={`Message #${activeRoom.name}`}
-                            className="w-full focus:outline-none focus:placeholder-gray-400 text-gray-200 placeholder-gray-500 pl-4 pr-20 bg-gray-800 rounded-md py-3 border border-gray-600 focus:border-blue-500"
-                        />
-                        <div className="absolute right-0 items-center inset-y-0 hidden sm:flex">
-                            <button type="submit" className="inline-flex items-center justify-center rounded-lg px-4 py-2 transition duration-500 ease-in-out text-white bg-blue-600 hover:bg-blue-700 focus:outline-none mr-2">
-                                <span className="font-bold">Send</span>
+                        <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={`Message #${activeRoom.name}`} className="w-full focus:outline-none focus:placeholder-gray-400 text-gray-200 placeholder-gray-500 pl-4 pr-16 bg-gray-800 rounded-md py-3 border border-gray-600 focus:border-purple-500"/>
+                        <div className="absolute right-0 items-center inset-y-0 flex">
+                            <button type="submit" className="inline-flex items-center justify-center rounded-lg px-3 py-2 transition duration-500 ease-in-out text-white bg-purple-600 hover:bg-purple-700 focus:outline-none mr-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-6 w-6 transform rotate-90">
+                                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
+                                </svg>
                             </button>
                         </div>
                     </form>
@@ -421,12 +688,9 @@
             );
         }
 
-        // --- Modals ---
         function CreateRoomModal({ user, services, closeModal }) {
             const [roomName, setRoomName] = useState('');
-            const [roomType, setRoomType] = useState('public');
             const [error, setError] = useState('');
-
             const handleCreateRoom = async (e) => {
                 e.preventDefault();
                 if (roomName.trim().length < 3) {
@@ -439,7 +703,8 @@
                     await services.setDoc(newRoomRef, {
                         id: newRoomRef.id,
                         name: roomName.trim(),
-                        type: roomType,
+                        type: 'private', // All rooms are private now
+                        isDM: false,
                         createdBy: user.uid,
                         createdAt: services.serverTimestamp(),
                         members: [user.uid]
@@ -450,25 +715,17 @@
                     setError("Failed to create room.");
                 }
             };
-
             return (
-                <Modal title="Create a New Room" closeModal={closeModal}>
+                <Modal title="Create a Group Chat" closeModal={closeModal}>
                     <form onSubmit={handleCreateRoom}>
                         <div className="mb-4">
-                            <label htmlFor="roomName" className="block text-gray-400 text-sm font-bold mb-2">Room Name</label>
-                            <input id="roomName" type="text" value={roomName} onChange={(e) => setRoomName(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-blue-500" />
-                        </div>
-                        <div className="mb-6">
-                            <label className="block text-gray-400 text-sm font-bold mb-2">Room Type</label>
-                            <div className="flex space-x-4">
-                                <button type="button" onClick={() => setRoomType('public')} className={`flex-1 p-3 rounded-md border ${roomType === 'public' ? 'bg-blue-600 border-blue-500' : 'bg-gray-700 border-gray-600 hover:bg-gray-600'}`}>Public</button>
-                                <button type="button" onClick={() => setRoomType('private')} className={`flex-1 p-3 rounded-md border ${roomType === 'private' ? 'bg-blue-600 border-blue-500' : 'bg-gray-700 border-gray-600 hover:bg-gray-600'}`}>Private</button>
-                            </div>
+                            <label htmlFor="roomName" className="block text-gray-400 text-sm font-bold mb-2">Group Name</label>
+                            <input id="roomName" type="text" value={roomName} onChange={(e) => setRoomName(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-purple-500" />
                         </div>
                         {error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}
                         <div className="flex justify-end space-x-4">
                             <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
-                            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Create</button>
+                            <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md">Create</button>
                         </div>
                     </form>
                 </Modal>
@@ -486,42 +743,31 @@
                 setSuccess('');
                 const trimmedRoomId = roomId.trim();
                 if (trimmedRoomId === '') return;
-
                 const roomRef = services.doc(services.db, `artifacts/${appId}/public/data/rooms`, trimmedRoomId);
-                
                 try {
                    const docSnap = await services.getDoc(roomRef);
-                   
                    if (docSnap.exists()) {
-                       const roomData = docSnap.data();
-                       if (roomData.type === 'private') {
-                           await services.updateDoc(roomRef, {
-                               members: services.arrayUnion(user.uid)
-                           });
-                           setSuccess(`Successfully joined room!`);
-                           setTimeout(closeModal, 1500);
-                       } else {
-                           setError("This is a public room and can be joined from the sidebar.");
-                       }
+                       await services.updateDoc(roomRef, { members: services.arrayUnion(user.uid) });
+                       setSuccess(`Successfully joined group!`);
+                       setTimeout(closeModal, 1500);
                    } else {
-                       setError("No room found with this ID. Hint: The ID is a long string of random characters, not the room name. Click the 'Copy ID' badge in a private room to get its ID.");
+                       setError("No group found with this ID. Please check the ID and try again.");
                    }
                 } catch(err) {
                     console.error("Error joining room: ", err);
-                    setError("An error occurred while trying to join the room.");
+                    setError("An error occurred while trying to join the group.");
                 }
             }
-
              return (
-                 <Modal title="Join a Private Room" closeModal={closeModal}>
+                 <Modal title="Join a Group Chat" closeModal={closeModal}>
                      <form onSubmit={handleJoin}>
-                        <label htmlFor="roomId" className="block text-gray-400 text-sm font-bold mb-2">Enter Room ID</label>
-                        <input id="roomId" type="text" value={roomId} onChange={(e) => setRoomId(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-blue-500" />
+                        <label htmlFor="roomId" className="block text-gray-400 text-sm font-bold mb-2">Enter Group ID</label>
+                        <input id="roomId" type="text" value={roomId} onChange={(e) => setRoomId(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-purple-500" />
                         {error && <p className="text-red-400 text-sm text-center my-4">{error}</p>}
                         {success && <p className="text-green-400 text-sm text-center my-4">{success}</p>}
                         <div className="flex justify-end space-x-4 mt-6">
                             <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
-                            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Join</button>
+                            <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md">Join</button>
                         </div>
                      </form>
                  </Modal>
@@ -543,34 +789,38 @@
                     return;
                 }
                 
-                const usersPath = `artifacts/${appId}/public/data/users`;
-                const friendQuery = services.query(services.collection(services.db, usersPath), services.where('uid', '==', id));
-                const friendSnap = await services.getDocs(friendQuery);
+                const friendDocRef = services.doc(services.db, `artifacts/${appId}/public/data/users`, id);
+                const friendSnap = await services.getDoc(friendDocRef);
                 
-                if (friendSnap.empty) {
+                if (!friendSnap.exists()) {
                     setError("User not found.");
                     return;
                 }
 
-                const userDocRef = services.doc(services.db, usersPath, user.uid);
-                await services.updateDoc(userDocRef, {
-                    friends: services.arrayUnion(id)
+                const requestRef = services.doc(services.db, `artifacts/${appId}/public/data/users/${id}/friendRequests`, user.uid);
+                await services.setDoc(requestRef, {
+                    from: user.uid,
+                    displayName: user.displayName,
+                    photoURL: user.photoURL,
+                    status: 'pending',
+                    createdAt: services.serverTimestamp()
                 });
-                setSuccess("Friend added successfully!");
+                
+                setSuccess("Friend request sent!");
                 setTimeout(closeModal, 1500);
             }
 
              return (
                  <Modal title="Add a Friend" closeModal={closeModal}>
-                     <p className="text-sm text-gray-400 mb-4">Enter your friend's unique User ID to add them to your friend list.</p>
+                     <p className="text-sm text-gray-400 mb-4">Enter your friend's unique User ID to send a request.</p>
                      <form onSubmit={handleAddFriend}>
                         <label htmlFor="friendId" className="block text-gray-400 text-sm font-bold mb-2">User ID</label>
-                        <input id="friendId" type="text" value={friendId} onChange={(e) => setFriendId(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-blue-500" />
+                        <input id="friendId" type="text" value={friendId} onChange={(e) => setFriendId(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-purple-500" />
                         {error && <p className="text-red-400 text-sm text-center my-4">{error}</p>}
                         {success && <p className="text-green-400 text-sm text-center my-4">{success}</p>}
                         <div className="flex justify-end space-x-4 mt-6">
                             <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
-                            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Add Friend</button>
+                            <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md">Send Request</button>
                         </div>
                      </form>
                  </Modal>
@@ -639,12 +889,12 @@
                                 type="text"
                                 value={displayName}
                                 onChange={(e) => setDisplayName(e.target.value)}
-                                className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-blue-500"
+                                className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-purple-500"
                             />
                         </div>
                         <div className="flex items-center justify-end space-x-4">
                              <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
-                             <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none">Save</button>
+                             <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none">Save</button>
                         </div>
                     </form>
                 </Modal>
@@ -653,8 +903,8 @@
 
         function Modal({ title, children, closeModal }) {
              return (
-                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-                    <div className="bg-gray-800 rounded-lg p-8 w-full max-w-md mx-4">
+                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-800 rounded-lg p-8 w-full max-w-md mx-auto">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-2xl font-bold text-white">{title}</h2>
                             <button onClick={closeModal} className="text-gray-400 hover:text-white">&times;</button>
@@ -665,7 +915,6 @@
             );
         }
 
-        // --- Render the App ---
         ReactDOM.render(<App />, document.getElementById('root'));
     </script>
 
