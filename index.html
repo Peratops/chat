@@ -37,6 +37,11 @@
             from { opacity: 1; }
             to { opacity: 0; }
         }
+        .main-chat-area {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
     </style>
 </head>
 <body class="bg-gray-900 overflow-hidden">
@@ -70,8 +75,6 @@
         const { useState, useEffect, useRef } = React;
         
         // --- Firebase Configuration ---
-        // IMPORTANT: This configuration is for demonstration. 
-        // In a real application, you should secure your keys and configure security rules.
         const firebaseConfig = {
             apiKey: "AIzaSyCcqfbDluQqNBDCElYzVOg3pBV5bG46Sjc",
             authDomain: "chat-39642.firebaseapp.com",
@@ -113,17 +116,14 @@
                     return;
                 }
 
-                // Listen for authentication state changes
                 const authUnsubscribe = servicesInstance.onAuthStateChanged(servicesInstance.auth, async (authUser) => {
                     if (authUser) {
                         const userDocRef = servicesInstance.doc(servicesInstance.db, `artifacts/${appId}/public/data/users/${authUser.uid}`);
                         
-                        // Listen for user profile changes in real-time
                         const userProfileUnsubscribe = servicesInstance.onSnapshot(userDocRef, (userDoc) => {
                             if (userDoc.exists()) {
                                 setUser({ ...authUser, ...userDoc.data() });
                             } else {
-                                // Create a new user profile if it doesn't exist
                                 servicesInstance.setDoc(userDocRef, {
                                     uid: authUser.uid,
                                     displayName: `User-${authUser.uid.slice(-6)}`,
@@ -137,7 +137,6 @@
                         
                         return () => userProfileUnsubscribe();
                     } else {
-                        // Sign in the user anonymously if not authenticated
                         servicesInstance.signInAnonymously(servicesInstance.auth).catch(authError => {
                              console.error("Anonymous Sign-In Error: ", authError);
                              setError("Could not authenticate with the server.");
@@ -181,21 +180,17 @@
             const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
             const [activeRoom, setActiveRoom] = useState(null);
             const [notification, setNotification] = useState(null);
+            const [unreadRooms, setUnreadRooms] = useState([]);
 
-            // Adjust sidebar visibility on window resize
             useEffect(() => {
                 const handleResize = () => {
-                    if (window.innerWidth >= 768) {
-                        setIsSidebarOpen(true);
-                    } else {
-                        setIsSidebarOpen(false);
-                    }
+                    setIsSidebarOpen(window.innerWidth >= 768);
                 };
                 window.addEventListener('resize', handleResize);
+                handleResize(); // Initial check
                 return () => window.removeEventListener('resize', handleResize);
             }, []);
 
-            // Handle joining rooms via shared links
             useEffect(() => {
                 const handleHashChange = async () => {
                     if (window.location.hash.startsWith('#room=')) {
@@ -205,13 +200,10 @@
                             const docSnap = await services.getDoc(roomRef);
 
                             if (docSnap.exists()) {
-                                // Automatically add user to the room when joining via link
                                 await services.updateDoc(roomRef, {
                                     members: services.arrayUnion(user.uid)
                                 });
                                 setActiveRoom({ id: docSnap.id, ...docSnap.data() });
-                                
-                                // Clean up the URL
                                 window.history.pushState("", document.title, window.location.pathname + window.location.search);
                             } else {
                                 alert("The room from the link could not be found.");
@@ -221,19 +213,26 @@
                 };
                 handleHashChange();
             }, [user, services]);
-
+            
+            const handleRoomSelect = (room) => {
+                setActiveRoom(room);
+                setUnreadRooms(prev => prev.filter(id => id !== room.id));
+                if(window.innerWidth < 768) setIsSidebarOpen(false);
+            }
 
             return (
                 <div className="flex h-screen antialiased text-gray-200 bg-gray-900 relative">
-                    {notification && <NotificationPopup notification={notification} setNotification={setNotification} setActiveRoom={setActiveRoom} />}
+                    {notification && <NotificationPopup notification={notification} setNotification={setNotification} setActiveRoom={handleRoomSelect} />}
                     <Sidebar 
                         user={user} 
                         services={services} 
                         isOpen={isSidebarOpen} 
                         setIsOpen={setIsSidebarOpen} 
-                        setActiveRoom={setActiveRoom}
+                        setActiveRoom={handleRoomSelect}
                         activeRoomId={activeRoom?.id}
                         setNotification={setNotification}
+                        unreadRooms={unreadRooms}
+                        setUnreadRooms={setUnreadRooms}
                     />
                     <MainChatArea 
                         user={user} 
@@ -247,7 +246,7 @@
             );
         }
 
-        function Sidebar({ user, services, isOpen, setIsOpen, setActiveRoom, activeRoomId, setNotification }) {
+        function Sidebar({ user, services, isOpen, setIsOpen, setActiveRoom, activeRoomId, setNotification, unreadRooms, setUnreadRooms }) {
             const [rooms, setRooms] = useState([]);
             const [friends, setFriends] = useState([]);
             const [friendRequests, setFriendRequests] = useState([]);
@@ -256,13 +255,11 @@
             const [showAddFriendModal, setShowAddFriendModal] = useState(false);
             const [showProfileModal, setShowProfileModal] = useState(false);
             
-            const dmRooms = rooms.filter(r => r.isDM);
+            const allRooms = rooms;
 
-            // Notification listener for new DM messages
+            // Notification and unread message listener
             useEffect(() => {
-                const unsubscribers = dmRooms.map(room => {
-                    if (room.id === activeRoomId) return null; // Don't notify for active room
-
+                const unsubscribers = allRooms.map(room => {
                     const messagesPath = `artifacts/${appId}/public/data/rooms/${room.id}/messages`;
                     const q = services.query(services.collection(services.db, messagesPath), services.orderBy('createdAt', 'desc'), services.limit(1));
                     
@@ -270,17 +267,19 @@
                         snapshot.docChanges().forEach((change) => {
                             if (change.type === 'added') {
                                 const message = change.doc.data();
-                                if (message.uid !== user.uid) { 
-                                    // Only show notification for recent messages
-                                    const timeSince = Date.now() - (message.createdAt?.toMillis() || 0);
-                                    if(timeSince < 5000) { 
+                                const isRecent = (Date.now() - (message.createdAt?.toMillis() || 0)) < 5000;
+
+                                if (message.uid !== user.uid && room.id !== activeRoomId) {
+                                     setUnreadRooms(prev => [...new Set([...prev, room.id])]);
+                                    
+                                     if (isRecent) {
                                          setNotification({
                                             from: message.displayName,
                                             text: message.text,
                                             photoURL: message.photoURL,
                                             room: room
                                         });
-                                    }
+                                     }
                                 }
                             }
                         });
@@ -289,9 +288,8 @@
 
                 return () => unsubscribers.forEach(unsub => unsub && unsub());
 
-            }, [dmRooms, activeRoomId, user.uid]);
-
-            // Listener for user's rooms
+            }, [allRooms, activeRoomId, user.uid]);
+            
             useEffect(() => {
                 const roomsPath = `artifacts/${appId}/public/data/rooms`;
                 const q = services.query(services.collection(services.db, roomsPath), services.where('members', 'array-contains', user.uid));
@@ -301,7 +299,6 @@
                 return unsubscribe;
             }, [user.uid]);
             
-            // Listener for user's friends list
             useEffect(() => {
                  if (!user.friends || user.friends.length === 0) {
                      setFriends([]);
@@ -314,8 +311,7 @@
                 });
                 return unsubscribe;
             }, [user.friends]);
-            
-            // Listener for friend requests
+
             useEffect(() => {
                 const requestsPath = `artifacts/${appId}/public/data/users/${user.uid}/friendRequests`;
                 const q = services.query(services.collection(services.db, requestsPath), services.where('status', '==', 'pending'));
@@ -326,11 +322,7 @@
             }, [user.uid]);
 
             const groupChats = rooms.filter(r => !r.isDM);
-
-            const handleRoomSelect = (room) => {
-                setActiveRoom(room);
-                if(window.innerWidth < 768) setIsOpen(false); // Close sidebar on selection on mobile
-            }
+            const dmRooms = rooms.filter(r => r.isDM);
             
             return (
                 <React.Fragment>
@@ -348,8 +340,8 @@
 
                         <div className="flex-grow p-4 overflow-y-auto">
                             {friendRequests.length > 0 && <Notifications requests={friendRequests} user={user} services={services} />}
-                            <RoomList title="Direct Messages" rooms={dmRooms} onSelect={handleRoomSelect} activeRoomId={activeRoomId} user={user} setActiveRoom={setActiveRoom} services={services} />
-                            <RoomList title="Group Chats" rooms={groupChats} onSelect={handleRoomSelect} activeRoomId={activeRoomId} user={user} setActiveRoom={setActiveRoom} services={services} />
+                            <CollapsibleRoomList title="Direct Messages" rooms={dmRooms} onSelect={setActiveRoom} activeRoomId={activeRoomId} user={user} services={services} setActiveRoom={setActiveRoom} unreadRooms={unreadRooms} />
+                            <CollapsibleRoomList title="Group Chats" rooms={groupChats} onSelect={setActiveRoom} activeRoomId={activeRoomId} user={user} services={services} setActiveRoom={setActiveRoom} unreadRooms={unreadRooms} />
                             <FriendList friends={friends} user={user} services={services} setActiveRoom={setActiveRoom} setIsSidebarOpen={setIsOpen} />
                         </div>
 
@@ -422,7 +414,7 @@
 
             return (
                 <div className="mb-4">
-                    <h2 className="text-sm font-semibold text-gray-400 mb-2 px-2">Friend Requests</h2>
+                    <h2 className="text-sm font-semibold text-gray-400 mb-2 px-2">Friend Requests ({requests.length})</h2>
                     <ul>
                         {requests.map(req => (
                             <li key={req.id} className="p-2 rounded-md bg-gray-800 mb-2">
@@ -438,7 +430,21 @@
             )
         }
 
-        function RoomList({ title, rooms, onSelect, activeRoomId, user, services, setActiveRoom }) {
+        function CollapsibleRoomList({ title, rooms, onSelect, activeRoomId, user, services, setActiveRoom, unreadRooms }) {
+            const [isOpen, setIsOpen] = useState(true);
+
+            return (
+                <div className="mb-4">
+                    <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center text-sm font-semibold text-gray-400 mb-2 px-2 focus:outline-none">
+                        <span>{title}</span>
+                        <svg className={`w-4 h-4 transform transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    {isOpen && <RoomList rooms={rooms} onSelect={onSelect} activeRoomId={activeRoomId} user={user} services={services} setActiveRoom={setActiveRoom} unreadRooms={unreadRooms} />}
+                </div>
+            );
+        }
+
+        function RoomList({ rooms, onSelect, activeRoomId, user, services, setActiveRoom, unreadRooms }) {
             const [contextMenu, setContextMenu] = useState({visible: false, x: 0, y: 0, room: null});
 
             const getDmName = (room) => {
@@ -461,23 +467,23 @@
 
             const handleLeaveRoom = async (room) => {
                 closeContextMenu();
-                if (room.isDM) return; // Should not be callable, but as a safeguard.
+                if (room.isDM) return;
                 
                 const roomRef = services.doc(services.db, `artifacts/${appId}/public/data/rooms`, room.id);
                 
-                // Add a system message to notify others
                 const messagesPath = `artifacts/${appId}/public/data/rooms/${room.id}/messages`;
                 await services.addDoc(services.collection(services.db, messagesPath), {
                     type: 'system',
                     text: `${user.displayName} has left the group.`,
                     createdAt: services.serverTimestamp(),
-                    uid: 'system' // Special UID for system messages
+                    uid: 'system'
                 });
 
-                // Remove the user from the room's members list
                 await services.updateDoc(roomRef, { members: services.arrayRemove(user.uid) });
                 
-                setActiveRoom(null); // Deselect the room after leaving
+                if (activeRoomId === room.id) {
+                    setActiveRoom(null);
+                }
             };
 
             const handleShareLink = (room) => {
@@ -488,12 +494,12 @@
             };
 
             return (
-                <div className="mb-4">
-                    <h2 className="text-sm font-semibold text-gray-400 mb-2 px-2">{title}</h2>
+                <div>
                     <ul>
                         {rooms.map(room => (
-                            <li key={room.id} onClick={() => onSelect(room)} onContextMenu={(e) => handleRightClick(e, room)} className={`p-2 rounded-md cursor-pointer text-sm ${activeRoomId === room.id ? 'bg-blue-900/70' : 'hover:bg-gray-700/50'}`}>
-                                # {room.isDM ? getDmName(room) : room.name}
+                            <li key={room.id} onClick={() => onSelect(room)} onContextMenu={(e) => handleRightClick(e, room)} className={`flex items-center justify-between p-2 rounded-md cursor-pointer text-sm ${activeRoomId === room.id ? 'bg-blue-900/70' : 'hover:bg-gray-700/50'}`}>
+                                <span className="truncate"># {room.isDM ? getDmName(room) : room.name}</span>
+                                {unreadRooms.includes(room.id) && <span className="w-2.5 h-2.5 bg-red-500 rounded-full"></span>}
                             </li>
                         ))}
                     </ul>
@@ -509,16 +515,15 @@
         
         function FriendList({ friends, user, services, setActiveRoom, setIsSidebarOpen }) {
             const handleDirectMessage = async (friend) => {
-                // Generate a consistent ID for the DM room between two users
                 const dmId = [user.uid, friend.uid].sort().join('_');
                 const dmRoomRef = services.doc(services.db, `artifacts/${appId}/public/data/rooms`, `dm_${dmId}`);
 
                 const docSnap = await services.getDoc(dmRoomRef);
+                let roomData;
                 if (docSnap.exists()) {
-                    setActiveRoom({id: docSnap.id, ...docSnap.data()});
+                    roomData = {id: docSnap.id, ...docSnap.data()};
                 } else {
-                    // Create a new DM room if one doesn't exist
-                    const newRoom = {
+                    roomData = {
                         id: `dm_${dmId}`,
                         name: `DM with ${friend.displayName}`,
                         isDM: true,
@@ -531,9 +536,9 @@
                             [friend.uid]: { displayName: friend.displayName, photoURL: friend.photoURL },
                         }
                     };
-                    await services.setDoc(dmRoomRef, newRoom);
-                    setActiveRoom(newRoom);
+                    await services.setDoc(dmRoomRef, roomData);
                 }
+                setActiveRoom(roomData);
                 if(window.innerWidth < 768) setIsSidebarOpen(false);
             };
 
@@ -557,8 +562,16 @@
             const [messages, setMessages] = useState([]);
             const [copiedId, setCopiedId] = useState(false);
             const [copiedLink, setCopiedLink] = useState(false);
-            const [replyTo, setReplyTo] = useState(null); // State for the message being replied to
+            const [replyTo, setReplyTo] = useState(null);
             const messagesEndRef = useRef(null);
+            const headerRef = useRef(null);
+            const [headerHeight, setHeaderHeight] = useState(0);
+
+            useEffect(() => {
+                if (headerRef.current) {
+                    setHeaderHeight(headerRef.current.offsetHeight);
+                }
+            }, [activeRoom]);
 
             const getDmName = (room) => {
                 if (!room.isDM || !room.members || !user) return room.name;
@@ -583,13 +596,12 @@
                 return `${baseUrl}#room=${activeRoom.id}`;
             };
             
-            // Fetch messages for the active room
             useEffect(() => {
                 if (!activeRoom) {
                     setMessages([]);
                     return;
                 }
-                setReplyTo(null); // Clear reply state when changing rooms
+                setReplyTo(null);
                 const messagesPath = `artifacts/${appId}/public/data/rooms/${activeRoom.id}/messages`;
                 const q = services.query(services.collection(services.db, messagesPath), services.orderBy('createdAt'));
                 const unsubscribe = services.onSnapshot(q, (snapshot) => {
@@ -598,7 +610,6 @@
                 return unsubscribe;
             }, [activeRoom]);
             
-            // Auto-scroll to the latest message
             useEffect(() => {
                 messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
             }, [messages]);
@@ -606,9 +617,9 @@
             if (!activeRoom) {
                 return (
                     <div className="flex-1 flex flex-col items-center justify-center text-center p-4 relative">
-                        <button onClick={() => setIsSidebarOpen(true)} className="absolute top-4 left-4 z-20 p-2 bg-gray-800 rounded-md text-white hover:bg-gray-700 md:hidden">
+                        {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="absolute top-4 left-4 z-20 p-2 bg-gray-800 rounded-md text-white hover:bg-gray-700 md:hidden">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
-                        </button>
+                        </button>}
                         <div>
                             <h2 className="text-2xl font-bold">Welcome to Chat Pro</h2>
                             <p className="text-gray-400 mt-2">Select a room or a friend to start chatting.</p>
@@ -618,17 +629,16 @@
             }
 
             return (
-                <main className="flex flex-col flex-1 min-w-0">
-                    {/* Sticky Header */}
-                    <header className="flex-shrink-0 bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 p-3 flex items-center justify-between sticky top-0 z-10">
-                        <div className="flex items-center">
-                            <button onClick={() => setIsSidebarOpen(true)} className="p-1 text-gray-400 hover:text-white mr-2 md:hidden">
+                <main className="main-chat-area flex-1 min-w-0">
+                    <header ref={headerRef} className="flex-shrink-0 bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 p-3 flex items-center justify-between z-10">
+                        <div className="flex items-center min-w-0">
+                             {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-1 text-gray-400 hover:text-white mr-2 md:hidden">
                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
-                             </button>
+                             </button>}
                             <h2 className="text-xl font-semibold truncate"># {activeRoom.isDM ? getDmName(activeRoom) : activeRoom.name}</h2>
                         </div>
                         {activeRoom.type === 'private' && !activeRoom.isDM && (
-                            <div className="flex space-x-2">
+                            <div className="flex space-x-2 flex-shrink-0">
                                 <button title="Copy Room ID" onClick={() => copyToClipboard(activeRoom.id, 'id')} className="text-xs flex items-center bg-gray-700 px-2 py-1 rounded-full hover:bg-gray-600">
                                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
                                     {copiedId ? 'Copied!' : 'Copy ID'}
@@ -641,7 +651,7 @@
                         )}
                     </header>
                     
-                    <div className="flex-1 p-4 sm:p-6 overflow-y-auto">
+                    <div className="flex-1 p-4 sm:p-6 overflow-y-auto" style={{paddingTop: `${headerHeight}px`}}>
                         {messages.map(msg => {
                            if (msg.type === 'system') {
                                return <SystemMessage key={msg.id} text={msg.text} />;
@@ -674,7 +684,6 @@
                         <div className={`flex flex-col space-y-1 text-sm max-w-xs mx-2 ${isOwnMessage ? 'order-1 items-end' : 'order-2 items-start'}`}>
                             {!isOwnMessage && <div className="text-xs text-gray-400 mb-1 px-1">{message.displayName}</div>}
                             
-                            {/* Render replied-to message block */}
                             {message.replyTo && (
                                 <div className="text-xs bg-gray-800/50 border-l-2 border-purple-400 px-2 py-1 mb-1 rounded opacity-80 max-w-full">
                                     <p className="font-bold">{message.replyTo.displayName}</p>
@@ -687,7 +696,6 @@
                             </div>
                         </div>
                     </div>
-                     {/* Reply button - shows on hover */}
                     <button onClick={() => onReply(message)} className={`p-1 bg-gray-800 rounded-full text-gray-400 hover:text-white transition-opacity opacity-0 group-hover:opacity-100 ${isOwnMessage ? 'order-0 mr-2' : 'order-3 ml-2'}`}>
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd"></path></svg>
                     </button>
@@ -712,7 +720,6 @@
                         photoURL: user.photoURL,
                     };
 
-                    // If replying to a message, add reply info to the data
                     if (replyTo) {
                         messageData.replyTo = {
                             id: replyTo.id,
@@ -723,12 +730,11 @@
 
                     await services.addDoc(messagesCollectionRef, messageData);
                     setNewMessage('');
-                    setReplyTo(null); // Clear reply state after sending
+                    setReplyTo(null);
                 } catch (error) { console.error("Error sending message: ", error); }
             };
             return (
-                 <div className="border-t-2 border-gray-700 px-4 pt-4 pb-4">
-                    {/* Reply preview UI */}
+                 <div className="border-t-2 border-gray-700 px-4 pt-4 pb-4 flex-shrink-0">
                     {replyTo && (
                         <div className="bg-gray-700 p-2 rounded-t-md text-sm mb-2">
                              <div className="flex justify-between items-center font-bold">
