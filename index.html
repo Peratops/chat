@@ -5,27 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Company Chat Pro</title>
     
-    <!-- Favicon -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💬</text></svg>">
+    <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAPnAAAD5wHDtfxxAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAAU5JREFUWIXt1rFqFFEYxfHfTEwhSBolRSxEsVwUKxErHyKoffI6AWsbIT5AyBOkEPElrKxWETURNolkj8Xu6uxUO5PkJsX+qzt37nfP4dy5wydJneRtkpN0Y5xEkjtJRgusP01ymGQ3yd1pLUm2Owq3Daz3qB0leZVEleQDnutOUGMdwx71Z9io8ahH8UWwgjdVkjQmx3iCLwtu8qOD4CpeYrcx97Nt4DMedti0D0OTY4Nx3Xr555LF4aAxTttAca7CQPPIr8TAHMsElgksE1gmcO0SKG7oRuv5AW7j+yVq/va/jzirkhzhVmPBCMcLbBQTs+eiSvIJT3vUznrCc1Gbb5GKUyVZwTu8NmkUF+VCEqjmW8IifMSz6XivtIFV/MJNfMOg9L1/PBWHLXwtbWAW/Q72Kf8NvMd9vMAp5X+997A5E6dsAmsYmNyCf/wF4VFBnEfh1mQAAAAASUVORK5CYII=">
     
-    <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Google Fonts for a nicer look -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
         body { font-family: 'Inter', sans-serif; }
-        /* Custom scrollbar for a better look in dark mode */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #1f2937; }
         ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
         .sidebar { transition: transform 0.3s ease-in-out; }
-        
-        /* Notification popup animation */
         .notification-popup {
             animation: slideIn 0.5s ease-out forwards, fadeOut 0.5s ease-in 4.5s forwards;
         }
@@ -38,30 +32,30 @@
             to { opacity: 0; }
         }
         .main-chat-area {
-            height: 100vh;
             display: flex;
             flex-direction: column;
+        }
+        .break-words {
+             overflow-wrap: break-word;
+             word-wrap: break-word;
+             word-break: break-all;
         }
     </style>
 </head>
 <body class="bg-gray-900 overflow-hidden">
     <div id="root"></div>
 
-    <!-- React Libraries -->
     <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
     
-    <!-- Babel to transpile JSX in the browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, setDoc, query, updateDoc, where, getDocs, arrayUnion, getDoc, writeBatch, deleteDoc, limit, orderBy, arrayRemove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
-        // Make Firebase services available globally for the React script
         window.firebaseServices = {
             initializeApp,
             getAuth, signInAnonymously, onAuthStateChanged,
@@ -70,11 +64,9 @@
         };
     </script>
 
-    <!-- React Application Code -->
     <script type="text/babel" data-presets="react">
         const { useState, useEffect, useRef } = React;
         
-        // --- Firebase Configuration ---
         const firebaseConfig = {
             apiKey: "AIzaSyCcqfbDluQqNBDCElYzVOg3pBV5bG46Sjc",
             authDomain: "chat-39642.firebaseapp.com",
@@ -87,6 +79,22 @@
         };
 
         const appId = 'company-chat-v1';
+        
+        const generateUniqueFriendCode = async (services) => {
+            const { db, collection, query, where, getDocs } = services;
+            const usersRef = collection(db, `artifacts/${appId}/public/data/users`);
+            let code;
+            let isUnique = false;
+            while (!isUnique) {
+                code = String(Math.floor(1000 + Math.random() * 9000));
+                const q = query(usersRef, where("friendCode", "==", code));
+                const snapshot = await getDocs(q);
+                if (snapshot.empty) {
+                    isUnique = true;
+                }
+            }
+            return code;
+        };
 
         function App() {
             const [services, setServices] = useState(null);
@@ -96,7 +104,6 @@
 
             useEffect(() => {
                 let servicesInstance = null;
-                
                 try {
                     if (window.firebaseServices) {
                         const s = window.firebaseServices;
@@ -120,22 +127,39 @@
                     if (authUser) {
                         const userDocRef = servicesInstance.doc(servicesInstance.db, `artifacts/${appId}/public/data/users/${authUser.uid}`);
                         
-                        const userProfileUnsubscribe = servicesInstance.onSnapshot(userDocRef, (userDoc) => {
+                        servicesInstance.updateDoc(userDocRef, { lastSeen: servicesInstance.serverTimestamp() }).catch(() => {});
+                        const presenceInterval = setInterval(() => {
+                           servicesInstance.updateDoc(userDocRef, { lastSeen: servicesInstance.serverTimestamp() }).catch(() => {});
+                        }, 60000);
+
+                        const userProfileUnsubscribe = servicesInstance.onSnapshot(userDocRef, async (userDoc) => {
                             if (userDoc.exists()) {
-                                setUser({ ...authUser, ...userDoc.data() });
+                                const userData = userDoc.data();
+                                if (!userData.friendCode) {
+                                    const newFriendCode = await generateUniqueFriendCode(servicesInstance);
+                                    await servicesInstance.updateDoc(userDocRef, { friendCode: newFriendCode });
+                                    setUser({ ...authUser, ...userData, friendCode: newFriendCode });
+                                } else {
+                                    setUser({ ...authUser, ...userData });
+                                }
                             } else {
-                                servicesInstance.setDoc(userDocRef, {
+                                const newFriendCode = await generateUniqueFriendCode(servicesInstance);
+                                await servicesInstance.setDoc(userDocRef, {
                                     uid: authUser.uid,
                                     displayName: `User-${authUser.uid.slice(-6)}`,
                                     photoURL: '',
                                     lastSeen: servicesInstance.serverTimestamp(),
                                     friends: [],
+                                    friendCode: newFriendCode,
                                 });
                             }
                             setIsAuthReady(true);
                         });
                         
-                        return () => userProfileUnsubscribe();
+                        return () => {
+                            userProfileUnsubscribe();
+                            clearInterval(presenceInterval);
+                        };
                     } else {
                         servicesInstance.signInAnonymously(servicesInstance.auth).catch(authError => {
                              console.error("Anonymous Sign-In Error: ", authError);
@@ -145,7 +169,6 @@
                 });
 
                 return () => authUnsubscribe();
-
             }, []);
 
             if (error) return <ErrorMessage message={error} />;
@@ -183,52 +206,31 @@
             const [unreadRooms, setUnreadRooms] = useState([]);
 
             useEffect(() => {
-                const handleResize = () => {
-                    setIsSidebarOpen(window.innerWidth >= 768);
-                };
+                const handleResize = () => setIsSidebarOpen(window.innerWidth >= 768);
                 window.addEventListener('resize', handleResize);
-                handleResize(); // Initial check
+                handleResize();
                 return () => window.removeEventListener('resize', handleResize);
             }, []);
 
-            useEffect(() => {
-                const handleHashChange = async () => {
-                    if (window.location.hash.startsWith('#room=')) {
-                        const roomId = window.location.hash.substring(6);
-                        if (roomId) {
-                            const roomRef = services.doc(services.db, `artifacts/${appId}/public/data/rooms`, roomId);
-                            const docSnap = await services.getDoc(roomRef);
-
-                            if (docSnap.exists()) {
-                                await services.updateDoc(roomRef, {
-                                    members: services.arrayUnion(user.uid)
-                                });
-                                setActiveRoom({ id: docSnap.id, ...docSnap.data() });
-                                window.history.pushState("", document.title, window.location.pathname + window.location.search);
-                            } else {
-                                alert("The room from the link could not be found.");
-                            }
-                        }
-                    }
-                };
-                handleHashChange();
-            }, [user, services]);
-            
-            const handleRoomSelect = (room) => {
+            const onRoomSelect = (room) => {
                 setActiveRoom(room);
-                setUnreadRooms(prev => prev.filter(id => id !== room.id));
-                if(window.innerWidth < 768) setIsSidebarOpen(false);
+                if (room) {
+                    setUnreadRooms(prev => prev.filter(id => id !== room.id));
+                }
+                if(window.innerWidth < 768) {
+                    setIsSidebarOpen(false);
+                }
             }
 
             return (
                 <div className="flex h-screen antialiased text-gray-200 bg-gray-900 relative">
-                    {notification && <NotificationPopup notification={notification} setNotification={setNotification} setActiveRoom={handleRoomSelect} />}
+                    {notification && <NotificationPopup notification={notification} setNotification={setNotification} setActiveRoom={onRoomSelect} />}
                     <Sidebar 
                         user={user} 
                         services={services} 
                         isOpen={isSidebarOpen} 
                         setIsOpen={setIsSidebarOpen} 
-                        setActiveRoom={handleRoomSelect}
+                        onRoomSelect={onRoomSelect}
                         activeRoomId={activeRoom?.id}
                         setNotification={setNotification}
                         unreadRooms={unreadRooms}
@@ -238,7 +240,6 @@
                         user={user} 
                         services={services} 
                         activeRoom={activeRoom}
-                        setActiveRoom={setActiveRoom}
                         isSidebarOpen={isSidebarOpen}
                         setIsSidebarOpen={setIsSidebarOpen}
                     />
@@ -246,7 +247,7 @@
             );
         }
 
-        function Sidebar({ user, services, isOpen, setIsOpen, setActiveRoom, activeRoomId, setNotification, unreadRooms, setUnreadRooms }) {
+        function Sidebar({ user, services, isOpen, setIsOpen, onRoomSelect, activeRoomId, setNotification, unreadRooms, setUnreadRooms }) {
             const [rooms, setRooms] = useState([]);
             const [friends, setFriends] = useState([]);
             const [friendRequests, setFriendRequests] = useState([]);
@@ -254,42 +255,13 @@
             const [showJoinRoomModal, setShowJoinRoomModal] = useState(false);
             const [showAddFriendModal, setShowAddFriendModal] = useState(false);
             const [showProfileModal, setShowProfileModal] = useState(false);
-            
-            const allRooms = rooms;
+            const [copiedCode, setCopiedCode] = useState(false);
+            const activeRoomIdRef = useRef(activeRoomId);
 
-            // Notification and unread message listener
             useEffect(() => {
-                const unsubscribers = allRooms.map(room => {
-                    const messagesPath = `artifacts/${appId}/public/data/rooms/${room.id}/messages`;
-                    const q = services.query(services.collection(services.db, messagesPath), services.orderBy('createdAt', 'desc'), services.limit(1));
-                    
-                    return services.onSnapshot(q, (snapshot) => {
-                        snapshot.docChanges().forEach((change) => {
-                            if (change.type === 'added') {
-                                const message = change.doc.data();
-                                const isRecent = (Date.now() - (message.createdAt?.toMillis() || 0)) < 5000;
+                activeRoomIdRef.current = activeRoomId;
+            }, [activeRoomId]);
 
-                                if (message.uid !== user.uid && room.id !== activeRoomId) {
-                                     setUnreadRooms(prev => [...new Set([...prev, room.id])]);
-                                    
-                                     if (isRecent) {
-                                         setNotification({
-                                            from: message.displayName,
-                                            text: message.text,
-                                            photoURL: message.photoURL,
-                                            room: room
-                                        });
-                                     }
-                                }
-                            }
-                        });
-                    });
-                });
-
-                return () => unsubscribers.forEach(unsub => unsub && unsub());
-
-            }, [allRooms, activeRoomId, user.uid]);
-            
             useEffect(() => {
                 const roomsPath = `artifacts/${appId}/public/data/rooms`;
                 const q = services.query(services.collection(services.db, roomsPath), services.where('members', 'array-contains', user.uid));
@@ -298,12 +270,34 @@
                 });
                 return unsubscribe;
             }, [user.uid]);
+
+            useEffect(() => {
+                if (rooms.length === 0) return;
+                const unsubscribers = rooms.map(room => {
+                    const messagesPath = `artifacts/${appId}/public/data/rooms/${room.id}/messages`;
+                    const q = services.query(services.collection(services.db, messagesPath), services.orderBy('createdAt', 'desc'), services.limit(1));
+                    return services.onSnapshot(q, (snapshot) => {
+                        snapshot.docChanges().forEach((change) => {
+                            if (change.type === 'added') {
+                                const message = change.doc.data();
+                                if (message.uid !== user.uid && room.id !== activeRoomIdRef.current) {
+                                     setUnreadRooms(prev => [...new Set([...prev, room.id])]);
+                                     const isRecent = (Date.now() - (message.createdAt?.toMillis() || 0)) < 5000;
+                                     if (isRecent && room.isDM) {
+                                         setNotification({
+                                            from: message.displayName, text: message.text, photoURL: message.photoURL, room: room
+                                        });
+                                     }
+                                }
+                            }
+                        });
+                    });
+                });
+                return () => unsubscribers.forEach(unsub => unsub && unsub());
+            }, [rooms, user.uid]);
             
             useEffect(() => {
-                 if (!user.friends || user.friends.length === 0) {
-                     setFriends([]);
-                     return;
-                 };
+                 if (!user.friends || user.friends.length === 0) { setFriends([]); return; };
                 const usersPath = `artifacts/${appId}/public/data/users`;
                 const q = services.query(services.collection(services.db, usersPath), services.where('uid', 'in', user.friends));
                 const unsubscribe = services.onSnapshot(q, (snapshot) => {
@@ -321,6 +315,13 @@
                 return unsubscribe;
             }, [user.uid]);
 
+            const copyFriendCode = () => {
+                navigator.clipboard.writeText(user.friendCode).then(() => {
+                    setCopiedCode(true);
+                    setTimeout(() => setCopiedCode(false), 2000);
+                });
+            };
+
             const groupChats = rooms.filter(r => !r.isDM);
             const dmRooms = rooms.filter(r => r.isDM);
             
@@ -330,8 +331,7 @@
                     <aside className={`sidebar fixed top-0 left-0 h-full w-64 bg-gray-900 border-r border-gray-700 flex-shrink-0 z-30 flex flex-col transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0`}>
                         <div className="flex-shrink-0 px-4 py-3 border-b border-gray-700 flex justify-between items-center">
                              <div>
-                                <h1 className="text-xl font-bold text-white">Chat Pro</h1>
-                                <p className="text-xs text-gray-400 mt-1 truncate" title={user.uid}>ID: {user.uid}</p>
+                                <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJkAAAAqCAYAAACgAvlhAAAACXBIWXMAAA7DAAAOwwHHb6hkAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAAwtJREFUeJzt3E9IFVEUx/Gv0zO1wP5AQSSCLQoiqbcpglq1CYO2uYgKo3YFIS0iiMI2EbUoMmhRUBC0KmpVREG0qiiRElqoEAT94VkaWlF2WtwZnBmePntv7p1mPB+44L2MnMPw05l5oxcRwR/LRKRHRAZE5Lu41xXqJRi9sWM6yhxja7THaj+ucHyDiBwSkeciMlrLiZiFkog8EZHdIlI3TT8XLfdQzoiI9IlIt4gsDHopYBSBu0ALqhrLgXvARkf1lgJb/dEJ7ALGHdWeyRJ/rAe6gJ3AoOcv3kEDVi0PuIm7gMXtAC6lVHsmazG5WlAADgOtsQO++MOlb47rJWU7sC22NgF8sFizBZgfmu8FzgP9obUSMGSxh3JWAg2h+TpgDyLyJnZdPSrJ3dfUOrJwT3YtdtwNMfdnNntr9vsJO+3w3Ew3PBE5F+vrtQe0hZI3Apx1Gf0cWBWbnwR+Wq45Bpyq0Eca/gAnAAmttXpAU2ghq5esNDXF5q7O4WiFPtIyDkyG5mNeWp2ouUNDpqzTkCnrNGTKOg2Zsk5DpqzTkCnrNGTKukLlQ/4rx4B9jmotclQn97IWsi1pN6D+nV4ulXVZ+02WBW+JviC2ZZ6DGonIWsiOA88c1WoDrlTxfYuTbiTrshayPuCho1rtjurkXtZClgVfcXe5bHZQp2YasuStAT45qFMEXjqoUzN9ulTWaciUdRoyZZ2GTFmnIVPWeUQft+vSakTll0f0cXsFZl8HpRJTAF5h/tUeoB64D/RiPlR06QUw7LimcqAAXGYqZAAbqO6dXa32oyHLi9VM3Xr99jBbRl1Nrx+VQ8OYzV6GgHfB0+VBoAf4kVZXKr+Cd5eTmI0yLgAdmM07Gh330l9m7QFmc5HAoKNeAD4DZ0Lz6bZhug48Cs0nrHUU9ZFofwOO6s5GN1PZKtWJuPiDATWHtBH9gezUD2NV0jaFvr4N3NKQqaQF25q+Bw6AvlZSydsM/MJsmFwCDZlKVj1m5+sjwNNgUUOmklTE3IdFduPWkKkkNeLfh4X9BboZZUSU9g5jAAAAAElFTkSuQmCC" alt="Company Chat Pro Logo" className="h-8"/>
                              </div>
                              <button onClick={() => setIsOpen(false)} className="p-1 text-gray-400 hover:text-white md:hidden">
                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -340,9 +340,9 @@
 
                         <div className="flex-grow p-4 overflow-y-auto">
                             {friendRequests.length > 0 && <Notifications requests={friendRequests} user={user} services={services} />}
-                            <CollapsibleRoomList title="Direct Messages" rooms={dmRooms} onSelect={setActiveRoom} activeRoomId={activeRoomId} user={user} services={services} setActiveRoom={setActiveRoom} unreadRooms={unreadRooms} />
-                            <CollapsibleRoomList title="Group Chats" rooms={groupChats} onSelect={setActiveRoom} activeRoomId={activeRoomId} user={user} services={services} setActiveRoom={setActiveRoom} unreadRooms={unreadRooms} />
-                            <FriendList friends={friends} user={user} services={services} setActiveRoom={setActiveRoom} setIsSidebarOpen={setIsOpen} />
+                            <CollapsibleRoomList title="Direct Messages" rooms={dmRooms} onSelect={onRoomSelect} activeRoomId={activeRoomId} user={user} services={services} unreadRooms={unreadRooms} />
+                            <CollapsibleRoomList title="Group Chats" rooms={groupChats} onSelect={onRoomSelect} activeRoomId={activeRoomId} user={user} services={services} unreadRooms={unreadRooms} />
+                            <FriendList friends={friends} user={user} services={services} onRoomSelect={onRoomSelect} />
                         </div>
 
                         <div className="flex-shrink-0 p-2 border-t border-gray-700">
@@ -363,35 +363,14 @@
         
         function NotificationPopup({ notification, setNotification, setActiveRoom }) {
             const { from, text, photoURL, room } = notification;
-
             useEffect(() => {
-                const timer = setTimeout(() => {
-                    setNotification(null);
-                }, 5000);
+                const timer = setTimeout(() => { setNotification(null); }, 5000);
                 return () => clearTimeout(timer);
             }, [notification]);
-
-            const handleClick = () => {
-                setActiveRoom(room);
-                setNotification(null);
-            };
-
+            const handleClick = () => { setActiveRoom(room); setNotification(null); };
             return (
-                <div 
-                    className="notification-popup fixed top-5 right-5 max-w-sm w-full bg-gray-800 shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden z-50 cursor-pointer"
-                    onClick={handleClick}
-                >
-                    <div className="p-4">
-                        <div className="flex items-start">
-                            <div className="flex-shrink-0">
-                                <img className="h-10 w-10 rounded-full" src={photoURL || `https://placehold.co/40x40/374151/E5E7EB?text=${from[0]}`} alt="" />
-                            </div>
-                            <div className="ml-3 w-0 flex-1 pt-0.5">
-                                <p className="text-sm font-medium text-white">{from}</p>
-                                <p className="mt-1 text-sm text-gray-400 truncate">{text}</p>
-                            </div>
-                        </div>
-                    </div>
+                <div className="notification-popup fixed top-5 right-5 max-w-sm w-full bg-gray-800 shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden z-50 cursor-pointer" onClick={handleClick}>
+                    <div className="p-4"><div className="flex items-start"><div className="flex-shrink-0"><img className="h-10 w-10 rounded-full" src={photoURL || `https://placehold.co/40x40/374151/E5E7EB?text=${from[0]}`} alt="" /></div><div className="ml-3 w-0 flex-1 pt-0.5"><p className="text-sm font-medium text-white">{from}</p><p className="mt-1 text-sm text-gray-400 truncate">{text}</p></div></div></div>
                 </div>
             );
         }
@@ -400,207 +379,104 @@
             const handleRequest = async (requestId, fromId, accept = false) => {
                 const batch = services.writeBatch(services.db);
                 const requestRef = services.doc(services.db, `artifacts/${appId}/public/data/users/${user.uid}/friendRequests`, requestId);
-
                 if (accept) {
                     const userRef = services.doc(services.db, `artifacts/${appId}/public/data/users`, user.uid);
                     const friendRef = services.doc(services.db, `artifacts/${appId}/public/data/users`, fromId);
-                    
                     batch.update(userRef, { friends: services.arrayUnion(fromId) });
                     batch.update(friendRef, { friends: services.arrayUnion(user.uid) });
                 }
                 batch.delete(requestRef);
                 await batch.commit();
             };
-
             return (
                 <div className="mb-4">
                     <h2 className="text-sm font-semibold text-gray-400 mb-2 px-2">Friend Requests ({requests.length})</h2>
-                    <ul>
-                        {requests.map(req => (
-                            <li key={req.id} className="p-2 rounded-md bg-gray-800 mb-2">
-                                <p className="text-sm">{req.displayName} wants to be your friend.</p>
-                                <div className="flex justify-end space-x-2 mt-2">
-                                    <button onClick={() => handleRequest(req.id, req.from, true)} className="text-xs bg-green-600 hover:bg-green-700 px-2 py-1 rounded">Accept</button>
-                                    <button onClick={() => handleRequest(req.id, req.from, false)} className="text-xs bg-red-600 hover:bg-red-700 px-2 py-1 rounded">Decline</button>
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
+                    <ul>{requests.map(req => (<li key={req.id} className="p-2 rounded-md bg-gray-800 mb-2"><p className="text-sm">{req.displayName} wants to be your friend.</p><div className="flex justify-end space-x-2 mt-2"><button onClick={() => handleRequest(req.id, req.from, true)} className="text-xs bg-green-600 hover:bg-green-700 px-2 py-1 rounded">Accept</button><button onClick={() => handleRequest(req.id, req.from, false)} className="text-xs bg-red-600 hover:bg-red-700 px-2 py-1 rounded">Decline</button></div></li>))}</ul>
                 </div>
             )
         }
 
-        function CollapsibleRoomList({ title, rooms, onSelect, activeRoomId, user, services, setActiveRoom, unreadRooms }) {
+        function CollapsibleRoomList({ title, rooms, onSelect, activeRoomId, user, services, unreadRooms }) {
             const [isOpen, setIsOpen] = useState(true);
-
             return (
                 <div className="mb-4">
                     <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center text-sm font-semibold text-gray-400 mb-2 px-2 focus:outline-none">
                         <span>{title}</span>
                         <svg className={`w-4 h-4 transform transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
-                    {isOpen && <RoomList rooms={rooms} onSelect={onSelect} activeRoomId={activeRoomId} user={user} services={services} setActiveRoom={setActiveRoom} unreadRooms={unreadRooms} />}
+                    {isOpen && <RoomList rooms={rooms} onSelect={onSelect} activeRoomId={activeRoomId} user={user} services={services} unreadRooms={unreadRooms} />}
                 </div>
             );
         }
 
-        function RoomList({ rooms, onSelect, activeRoomId, user, services, setActiveRoom, unreadRooms }) {
+        function RoomList({ rooms, onSelect, activeRoomId, user, services, unreadRooms }) {
             const [contextMenu, setContextMenu] = useState({visible: false, x: 0, y: 0, room: null});
-
             const getDmName = (room) => {
                 if (!room.isDM || !room.members || !user) return room.name;
                 const otherUserId = room.members.find(uid => uid !== user.uid);
                 return room.memberDetails?.[otherUserId]?.displayName || room.name;
             }
-
-            const handleRightClick = (e, room) => {
-                e.preventDefault();
-                setContextMenu({ visible: true, x: e.clientX, y: e.clientY, room });
-            }
-
+            const handleRightClick = (e, room) => { e.preventDefault(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, room }); }
             const closeContextMenu = () => setContextMenu({visible: false, x:0, y:0, room: null});
-            
-            useEffect(() => {
-                document.addEventListener('click', closeContextMenu);
-                return () => document.removeEventListener('click', closeContextMenu);
-            }, []);
-
+            useEffect(() => { document.addEventListener('click', closeContextMenu); return () => document.removeEventListener('click', closeContextMenu); }, []);
             const handleLeaveRoom = async (room) => {
                 closeContextMenu();
                 if (room.isDM) return;
-                
                 const roomRef = services.doc(services.db, `artifacts/${appId}/public/data/rooms`, room.id);
-                
                 const messagesPath = `artifacts/${appId}/public/data/rooms/${room.id}/messages`;
                 await services.addDoc(services.collection(services.db, messagesPath), {
-                    type: 'system',
-                    text: `${user.displayName} has left the group.`,
-                    createdAt: services.serverTimestamp(),
-                    uid: 'system'
+                    type: 'system', text: `${user.displayName} has left the group.`, createdAt: services.serverTimestamp(), uid: 'system'
                 });
-
                 await services.updateDoc(roomRef, { members: services.arrayRemove(user.uid) });
-                
-                if (activeRoomId === room.id) {
-                    setActiveRoom(null);
-                }
+                if (activeRoomId === room.id) { onSelect(null); }
             };
-
             const handleShareLink = (room) => {
                 closeContextMenu();
                 const baseUrl = window.location.href.split('#')[0];
-                const link = `${baseUrl}#room=${room.id}`;
-                navigator.clipboard.writeText(link).then(() => alert('Invite link copied to clipboard!'));
+                navigator.clipboard.writeText(`${baseUrl}#room=${room.id}`).then(() => alert('Invite link copied to clipboard!'));
             };
-
             return (
                 <div>
-                    <ul>
-                        {rooms.map(room => (
-                            <li key={room.id} onClick={() => onSelect(room)} onContextMenu={(e) => handleRightClick(e, room)} className={`flex items-center justify-between p-2 rounded-md cursor-pointer text-sm ${activeRoomId === room.id ? 'bg-blue-900/70' : 'hover:bg-gray-700/50'}`}>
-                                <span className="truncate"># {room.isDM ? getDmName(room) : room.name}</span>
-                                {unreadRooms.includes(room.id) && <span className="w-2.5 h-2.5 bg-red-500 rounded-full"></span>}
-                            </li>
-                        ))}
-                    </ul>
-                     {contextMenu.visible && (
-                        <div style={{ top: contextMenu.y, left: contextMenu.x }} className="absolute bg-gray-800 border border-gray-600 rounded-md shadow-lg py-1 z-50">
-                           {!contextMenu.room.isDM && <button onClick={() => handleShareLink(contextMenu.room)} className="block w-full text-left px-4 py-2 text-sm text-white hover:bg-blue-600">Share Link</button>}
-                           {!contextMenu.room.isDM && <button onClick={() => handleLeaveRoom(contextMenu.room)} className="block w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-600 hover:text-white">Leave Group</button>}
-                        </div>
-                    )}
+                    <ul>{rooms.map(room => (<li key={room.id} onClick={() => onSelect(room)} onContextMenu={(e) => handleRightClick(e, room)} className={`flex items-center justify-between p-2 rounded-md cursor-pointer text-sm ${activeRoomId === room.id ? 'bg-blue-900/70' : 'hover:bg-gray-700/50'}`}><span className="truncate"># {room.isDM ? getDmName(room) : room.name}</span>{unreadRooms.includes(room.id) && <span className="w-2.5 h-2.5 bg-red-500 rounded-full"></span>}</li>))}</ul>
+                     {contextMenu.visible && (<div style={{ top: contextMenu.y, left: contextMenu.x }} className="absolute bg-gray-800 border border-gray-600 rounded-md shadow-lg py-1 z-50">{!contextMenu.room.isDM && <button onClick={() => handleShareLink(contextMenu.room)} className="block w-full text-left px-4 py-2 text-sm text-white hover:bg-blue-600">Share Link</button>}{!contextMenu.room.isDM && <button onClick={() => handleLeaveRoom(contextMenu.room)} className="block w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-600 hover:text-white">Leave Group</button>}</div>)}
                 </div>
             )
         }
         
-        function FriendList({ friends, user, services, setActiveRoom, setIsSidebarOpen }) {
+        function FriendList({ friends, user, services, onRoomSelect }) {
+            const isOnline = (friend) => {
+                if (!friend.lastSeen) return false;
+                const lastSeenMillis = friend.lastSeen.toMillis();
+                const nowMillis = Date.now();
+                return (nowMillis - lastSeenMillis) < 120000; // 2 minutes
+            };
             const handleDirectMessage = async (friend) => {
                 const dmId = [user.uid, friend.uid].sort().join('_');
                 const dmRoomRef = services.doc(services.db, `artifacts/${appId}/public/data/rooms`, `dm_${dmId}`);
-
                 const docSnap = await services.getDoc(dmRoomRef);
                 let roomData;
                 if (docSnap.exists()) {
                     roomData = {id: docSnap.id, ...docSnap.data()};
                 } else {
-                    roomData = {
-                        id: `dm_${dmId}`,
-                        name: `DM with ${friend.displayName}`,
-                        isDM: true,
-                        type: 'private',
-                        createdBy: user.uid,
-                        createdAt: services.serverTimestamp(),
-                        members: [user.uid, friend.uid],
-                        memberDetails: {
-                            [user.uid]: { displayName: user.displayName, photoURL: user.photoURL },
-                            [friend.uid]: { displayName: friend.displayName, photoURL: friend.photoURL },
-                        }
-                    };
+                    roomData = { id: `dm_${dmId}`, name: `DM with ${friend.displayName}`, isDM: true, type: 'private', createdBy: user.uid, createdAt: services.serverTimestamp(), members: [user.uid, friend.uid], memberDetails: { [user.uid]: { displayName: user.displayName, photoURL: user.photoURL }, [friend.uid]: { displayName: friend.displayName, photoURL: friend.photoURL }}};
                     await services.setDoc(dmRoomRef, roomData);
                 }
-                setActiveRoom(roomData);
-                if(window.innerWidth < 768) setIsSidebarOpen(false);
+                onRoomSelect(roomData);
             };
-
-            return (
-                 <div className="mb-4">
-                    <h2 className="text-sm font-semibold text-gray-400 mb-2 px-2">Friends</h2>
-                    <ul>
-                        {friends.map(friend => (
-                            <li key={friend.uid} onClick={() => handleDirectMessage(friend)} className="flex items-center p-2 rounded-md text-sm hover:bg-gray-700/50 cursor-pointer">
-                                <span className="w-2 h-2 bg-green-500 rounded-full mr-3 flex-shrink-0"></span>
-                                <img src={friend.photoURL || `https://placehold.co/32x32/374151/E5E7EB?text=${(friend.displayName || 'U')[0]}`} alt={friend.displayName} className="w-6 h-6 rounded-full mr-2" />
-                                <span className="truncate">{friend.displayName}</span>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )
+            return (<div className="mb-4"><h2 className="text-sm font-semibold text-gray-400 mb-2 px-2">Friends</h2><ul>{friends.map(friend => (<li key={friend.uid} onClick={() => handleDirectMessage(friend)} className="flex items-center p-2 rounded-md text-sm hover:bg-gray-700/50 cursor-pointer"><span className={`w-2 h-2 rounded-full mr-3 flex-shrink-0 ${isOnline(friend) ? 'bg-green-500' : 'bg-red-500'}`}></span><img src={friend.photoURL || `https://placehold.co/32x32/374151/E5E7EB?text=${(friend.displayName || 'U')[0]}`} alt={friend.displayName} className="w-6 h-6 rounded-full mr-2" /><span className="truncate">{friend.displayName}</span></li>))}</ul></div>)
         }
 
-        function MainChatArea({ user, services, activeRoom, setActiveRoom, isSidebarOpen, setIsSidebarOpen }) {
+        function MainChatArea({ user, services, activeRoom, isSidebarOpen, setIsSidebarOpen }) {
             const [messages, setMessages] = useState([]);
-            const [copiedId, setCopiedId] = useState(false);
-            const [copiedLink, setCopiedLink] = useState(false);
             const [replyTo, setReplyTo] = useState(null);
             const messagesEndRef = useRef(null);
-            const headerRef = useRef(null);
-            const [headerHeight, setHeaderHeight] = useState(0);
-
-            useEffect(() => {
-                if (headerRef.current) {
-                    setHeaderHeight(headerRef.current.offsetHeight);
-                }
-            }, [activeRoom]);
-
             const getDmName = (room) => {
-                if (!room.isDM || !room.members || !user) return room.name;
+                if (!room?.isDM || !room.members || !user) return room?.name;
                 const otherUserId = room.members.find(uid => uid !== user.uid);
                 return room.memberDetails?.[otherUserId]?.displayName || room.name;
             }
-
-            const copyToClipboard = (text, type) => {
-                navigator.clipboard.writeText(text).then(() => {
-                    if (type === 'id') {
-                        setCopiedId(true);
-                        setTimeout(() => setCopiedId(false), 2000);
-                    } else if (type === 'link') {
-                        setCopiedLink(true);
-                        setTimeout(() => setCopiedLink(false), 2000);
-                    }
-                });
-            };
-            
-            const getShareLink = () => {
-                const baseUrl = window.location.href.split('#')[0];
-                return `${baseUrl}#room=${activeRoom.id}`;
-            };
-            
             useEffect(() => {
-                if (!activeRoom) {
-                    setMessages([]);
-                    return;
-                }
+                if (!activeRoom) { setMessages([]); return; }
                 setReplyTo(null);
                 const messagesPath = `artifacts/${appId}/public/data/rooms/${activeRoom.id}/messages`;
                 const q = services.query(services.collection(services.db, messagesPath), services.orderBy('createdAt'));
@@ -609,96 +485,44 @@
                 });
                 return unsubscribe;
             }, [activeRoom]);
-            
-            useEffect(() => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-            }, [messages]);
-
+            useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
             if (!activeRoom) {
                 return (
                     <div className="flex-1 flex flex-col items-center justify-center text-center p-4 relative">
-                        {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="absolute top-4 left-4 z-20 p-2 bg-gray-800 rounded-md text-white hover:bg-gray-700 md:hidden">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
-                        </button>}
-                        <div>
-                            <h2 className="text-2xl font-bold">Welcome to Chat Pro</h2>
-                            <p className="text-gray-400 mt-2">Select a room or a friend to start chatting.</p>
-                        </div>
+                        <button onClick={() => setIsSidebarOpen(true)} className="absolute top-4 left-4 z-20 p-2 bg-gray-800 rounded-md text-white hover:bg-gray-700 md:hidden"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg></button>
+                        <div><h2 className="text-2xl font-bold">Welcome to Chat Pro</h2><p className="text-gray-400 mt-2">Select a room or a friend to start chatting.</p></div>
                     </div>
                 );
             }
-
             return (
-                <main className="main-chat-area flex-1 min-w-0">
-                    <header ref={headerRef} className="flex-shrink-0 bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 p-3 flex items-center justify-between z-10">
+                <main className="main-chat-area flex-1 min-w-0 h-full">
+                    <header className="flex-shrink-0 bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 p-3 flex items-center justify-between z-10">
                         <div className="flex items-center min-w-0">
-                             {!isSidebarOpen && <button onClick={() => setIsSidebarOpen(true)} className="p-1 text-gray-400 hover:text-white mr-2 md:hidden">
-                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
-                             </button>}
+                             <button onClick={() => setIsSidebarOpen(true)} className="p-1 text-gray-400 hover:text-white mr-2 md:hidden"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg></button>
                             <h2 className="text-xl font-semibold truncate"># {activeRoom.isDM ? getDmName(activeRoom) : activeRoom.name}</h2>
                         </div>
-                        {activeRoom.type === 'private' && !activeRoom.isDM && (
-                            <div className="flex space-x-2 flex-shrink-0">
-                                <button title="Copy Room ID" onClick={() => copyToClipboard(activeRoom.id, 'id')} className="text-xs flex items-center bg-gray-700 px-2 py-1 rounded-full hover:bg-gray-600">
-                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                                    {copiedId ? 'Copied!' : 'Copy ID'}
-                                </button>
-                                <button title="Copy Invite Link" onClick={() => copyToClipboard(getShareLink(), 'link')} className="text-xs flex items-center bg-gray-700 px-2 py-1 rounded-full hover:bg-gray-600">
-                                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899l4-4a4 4 0 000-5.656 4 4 0 00-5.656 0l-4 4"></path></svg>
-                                    {copiedLink ? 'Copied!' : 'Share Link'}
-                                </button>
-                            </div>
-                        )}
                     </header>
-                    
-                    <div className="flex-1 p-4 sm:p-6 overflow-y-auto" style={{paddingTop: `${headerHeight}px`}}>
-                        {messages.map(msg => {
-                           if (msg.type === 'system') {
-                               return <SystemMessage key={msg.id} text={msg.text} />;
-                           }
-                           return <MessageBubble key={msg.id} message={msg} isOwnMessage={msg.uid === user.uid} onReply={setReplyTo} />;
-                        })}
-                        <div ref={messagesEndRef} />
-                    </div>
-
+                    <div className="flex-1 p-4 sm:p-6 overflow-y-auto">{messages.map(msg => (msg.type === 'system' ? <SystemMessage key={msg.id} text={msg.text} /> : <MessageBubble key={msg.id} message={msg} isOwnMessage={msg.uid === user.uid} onReply={setReplyTo} />))}<div ref={messagesEndRef} /></div>
                     <MessageInput user={user} services={services} activeRoom={activeRoom} replyTo={replyTo} setReplyTo={setReplyTo} />
                 </main>
             );
         }
         
-        function SystemMessage({ text }) {
-            return (
-                <div className="text-center my-2">
-                    <span className="text-xs text-gray-500 bg-gray-800 px-3 py-1 rounded-full">{text}</span>
-                </div>
-            );
-        }
+        function SystemMessage({ text }) { return (<div className="text-center my-2"><span className="text-xs text-gray-500 bg-gray-800 px-3 py-1 rounded-full">{text}</span></div>); }
         
         function MessageBubble({ message, isOwnMessage, onReply }) {
             const avatarSrc = message.photoURL || `https://placehold.co/32x32/374151/E5E7EB?text=${(message.displayName || 'U')[0]}`;
-            
             return (
-                <div className={`chat-message flex items-end my-2 group ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-                    <div className="flex items-center">
-                        {!isOwnMessage && <img src={avatarSrc} alt={message.displayName} className="w-8 h-8 rounded-full order-1 flex-shrink-0" />}
-                        <div className={`flex flex-col space-y-1 text-sm max-w-xs mx-2 ${isOwnMessage ? 'order-1 items-end' : 'order-2 items-start'}`}>
+                <div className={`flex my-2 group ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                    <div className="flex items-end">
+                        {!isOwnMessage && <img src={avatarSrc} alt={message.displayName} className="w-8 h-8 rounded-full mr-2 flex-shrink-0" />}
+                        <div className={`flex flex-col space-y-1 text-sm max-w-xs ${isOwnMessage ? 'items-end' : 'items-start'}`}>
                             {!isOwnMessage && <div className="text-xs text-gray-400 mb-1 px-1">{message.displayName}</div>}
-                            
-                            {message.replyTo && (
-                                <div className="text-xs bg-gray-800/50 border-l-2 border-purple-400 px-2 py-1 mb-1 rounded opacity-80 max-w-full">
-                                    <p className="font-bold">{message.replyTo.displayName}</p>
-                                    <p className="text-gray-400 truncate">{message.replyTo.text}</p>
-                                </div>
-                            )}
-
-                            <div className={`px-4 py-2 rounded-lg inline-block relative ${isOwnMessage ? 'rounded-br-none bg-purple-600 text-white' : 'rounded-bl-none bg-gray-700 text-gray-200'}`}>
-                                {message.text}
-                            </div>
+                            {message.replyTo && (<div className="text-xs bg-gray-800/50 border-l-2 border-purple-400 px-2 py-1 mb-1 rounded opacity-80 max-w-full"><p className="font-bold">{message.replyTo.displayName}</p><p className="text-gray-400 truncate break-words">{message.replyTo.text}</p></div>)}
+                            <div className={`px-4 py-2 rounded-lg inline-block relative break-words ${isOwnMessage ? 'rounded-br-none bg-purple-600 text-white' : 'rounded-bl-none bg-gray-700 text-gray-200'}`}>{message.text}</div>
                         </div>
+                        <button onClick={() => onReply(message)} className={`self-end p-1 bg-gray-800 rounded-full text-gray-400 hover:text-white transition-opacity opacity-0 group-hover:opacity-100 flex-shrink-0 ${isOwnMessage ? 'ml-0 mr-2 order-first' : 'ml-2'}`}><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd"></path></svg></button>
                     </div>
-                    <button onClick={() => onReply(message)} className={`p-1 bg-gray-800 rounded-full text-gray-400 hover:text-white transition-opacity opacity-0 group-hover:opacity-100 ${isOwnMessage ? 'order-0 mr-2' : 'order-3 ml-2'}`}>
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd"></path></svg>
-                    </button>
                 </div>
             );
         }
@@ -711,23 +535,8 @@
                 try {
                     const messagesPath = `artifacts/${appId}/public/data/rooms/${activeRoom.id}/messages`;
                     const messagesCollectionRef = services.collection(services.db, messagesPath);
-                    
-                    const messageData = {
-                        text: newMessage,
-                        createdAt: services.serverTimestamp(),
-                        uid: user.uid,
-                        displayName: user.displayName,
-                        photoURL: user.photoURL,
-                    };
-
-                    if (replyTo) {
-                        messageData.replyTo = {
-                            id: replyTo.id,
-                            text: replyTo.text,
-                            displayName: replyTo.displayName
-                        };
-                    }
-
+                    const messageData = { text: newMessage, createdAt: services.serverTimestamp(), uid: user.uid, displayName: user.displayName, photoURL: user.photoURL };
+                    if (replyTo) { messageData.replyTo = { id: replyTo.id, text: replyTo.text, displayName: replyTo.displayName }; }
                     await services.addDoc(messagesCollectionRef, messageData);
                     setNewMessage('');
                     setReplyTo(null);
@@ -735,25 +544,8 @@
             };
             return (
                  <div className="border-t-2 border-gray-700 px-4 pt-4 pb-4 flex-shrink-0">
-                    {replyTo && (
-                        <div className="bg-gray-700 p-2 rounded-t-md text-sm mb-2">
-                             <div className="flex justify-between items-center font-bold">
-                                <p>Replying to {replyTo.displayName}</p>
-                                <button onClick={() => setReplyTo(null)} className="text-gray-400 hover:text-white text-lg">&times;</button>
-                            </div>
-                            <p className="text-gray-400 truncate mt-1">{replyTo.text}</p>
-                        </div>
-                    )}
-                    <form onSubmit={handleSendMessage} className="relative flex">
-                        <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={`Message #${activeRoom.name}`} className="w-full focus:outline-none focus:placeholder-gray-400 text-gray-200 placeholder-gray-500 pl-4 pr-16 bg-gray-800 rounded-md py-3 border border-gray-600 focus:border-purple-500"/>
-                        <div className="absolute right-0 items-center inset-y-0 flex">
-                            <button type="submit" className="inline-flex items-center justify-center rounded-lg px-3 py-2 transition duration-500 ease-in-out text-white bg-purple-600 hover:bg-purple-700 focus:outline-none mr-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-6 w-6 transform rotate-90">
-                                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
-                                </svg>
-                            </button>
-                        </div>
-                    </form>
+                    {replyTo && (<div className="bg-gray-700 p-2 rounded-t-md text-sm mb-2"><div className="flex justify-between items-center font-bold"><p>Replying to {replyTo.displayName}</p><button onClick={() => setReplyTo(null)} className="text-gray-400 hover:text-white text-lg">&times;</button></div><p className="text-gray-400 truncate mt-1">{replyTo.text}</p></div>)}
+                    <form onSubmit={handleSendMessage} className="relative flex"><input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={`Message #${activeRoom.name}`} className="w-full focus:outline-none focus:placeholder-gray-400 text-gray-200 placeholder-gray-500 pl-4 pr-16 bg-gray-800 rounded-md py-3 border border-gray-600 focus:border-purple-500"/><div className="absolute right-0 items-center inset-y-0 flex"><button type="submit" className="inline-flex items-center justify-center rounded-lg px-3 py-2 transition duration-500 ease-in-out text-white bg-purple-600 hover:bg-purple-700 focus:outline-none mr-2"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-6 w-6 transform rotate-90"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg></button></div></form>
                 </div>
             );
         }
@@ -763,54 +555,24 @@
             const [error, setError] = useState('');
             const handleCreateRoom = async (e) => {
                 e.preventDefault();
-                if (roomName.trim().length < 3) {
-                    setError('Room name must be at least 3 characters.');
-                    return;
-                }
+                if (roomName.trim().length < 3) { setError('Room name must be at least 3 characters.'); return; }
                 try {
                     const roomsPath = `artifacts/${appId}/public/data/rooms`;
                     const newRoomRef = services.doc(services.collection(services.db, roomsPath));
-                    await services.setDoc(newRoomRef, {
-                        id: newRoomRef.id,
-                        name: roomName.trim(),
-                        type: 'private',
-                        isDM: false,
-                        createdBy: user.uid,
-                        createdAt: services.serverTimestamp(),
-                        members: [user.uid]
-                    });
+                    await services.setDoc(newRoomRef, { id: newRoomRef.id, name: roomName.trim(), type: 'private', isDM: false, createdBy: user.uid, createdAt: services.serverTimestamp(), members: [user.uid] });
                     closeModal();
-                } catch (err) {
-                    console.error("Error creating room:", err);
-                    setError("Failed to create room.");
-                }
+                } catch (err) { console.error("Error creating room:", err); setError("Failed to create room."); }
             };
-            return (
-                <Modal title="Create a Group Chat" closeModal={closeModal}>
-                    <form onSubmit={handleCreateRoom}>
-                        <div className="mb-4">
-                            <label htmlFor="roomName" className="block text-gray-400 text-sm font-bold mb-2">Group Name</label>
-                            <input id="roomName" type="text" value={roomName} onChange={(e) => setRoomName(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-purple-500" />
-                        </div>
-                        {error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}
-                        <div className="flex justify-end space-x-4">
-                            <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
-                            <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md">Create</button>
-                        </div>
-                    </form>
-                </Modal>
-            );
+            return (<Modal title="Create a Group Chat" closeModal={closeModal}><form onSubmit={handleCreateRoom}><div className="mb-4"><label htmlFor="roomName" className="block text-gray-400 text-sm font-bold mb-2">Group Name</label><input id="roomName" type="text" value={roomName} onChange={(e) => setRoomName(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-purple-500" /></div>{error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}<div className="flex justify-end space-x-4"><button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button><button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md">Create</button></div></form></Modal>);
         }
 
         function JoinRoomModal({ user, services, closeModal }) {
              const [roomId, setRoomId] = useState('');
              const [error, setError] = useState('');
              const [success, setSuccess] = useState('');
-            
             const handleJoin = async (e) => {
                 e.preventDefault();
-                setError('');
-                setSuccess('');
+                setError(''); setSuccess('');
                 const trimmedRoomId = roomId.trim();
                 if (trimmedRoomId === '') return;
                 const roomRef = services.doc(services.db, `artifacts/${appId}/public/data/rooms`, trimmedRoomId);
@@ -820,78 +582,49 @@
                        await services.updateDoc(roomRef, { members: services.arrayUnion(user.uid) });
                        setSuccess(`Successfully joined group!`);
                        setTimeout(closeModal, 1500);
-                   } else {
-                       setError("No group found with this ID. Please check the ID and try again.");
-                   }
-                } catch(err) {
-                    console.error("Error joining room: ", err);
-                    setError("An error occurred while trying to join the group.");
-                }
+                   } else { setError("No group found with this ID. Please check the ID and try again."); }
+                } catch(err) { console.error("Error joining room: ", err); setError("An error occurred while trying to join the group."); }
             }
-             return (
-                 <Modal title="Join a Group Chat" closeModal={closeModal}>
-                     <form onSubmit={handleJoin}>
-                        <label htmlFor="roomId" className="block text-gray-400 text-sm font-bold mb-2">Enter Group ID</label>
-                        <input id="roomId" type="text" value={roomId} onChange={(e) => setRoomId(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-purple-500" />
-                        {error && <p className="text-red-400 text-sm text-center my-4">{error}</p>}
-                        {success && <p className="text-green-400 text-sm text-center my-4">{success}</p>}
-                        <div className="flex justify-end space-x-4 mt-6">
-                            <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
-                            <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md">Join</button>
-                        </div>
-                     </form>
-                 </Modal>
-            )
+             return (<Modal title="Join a Group Chat" closeModal={closeModal}><form onSubmit={handleJoin}><label htmlFor="roomId" className="block text-gray-400 text-sm font-bold mb-2">Enter Group ID</label><input id="roomId" type="text" value={roomId} onChange={(e) => setRoomId(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-purple-500" />{error && <p className="text-red-400 text-sm text-center my-4">{error}</p>}{success && <p className="text-green-400 text-sm text-center my-4">{success}</p>}<div className="flex justify-end space-x-4 mt-6"><button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button><button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md">Join</button></div></form></Modal>)
         }
 
         function AddFriendModal({ user, services, closeModal }) {
-             const [friendId, setFriendId] = useState('');
+             const [friendCode, setFriendCode] = useState('');
              const [error, setError] = useState('');
              const [success, setSuccess] = useState('');
-            
             const handleAddFriend = async (e) => {
                 e.preventDefault();
-                setError('');
-                setSuccess('');
-                const id = friendId.trim();
-                if (id === '' || id === user.uid) {
-                    setError("Please enter a valid User ID.");
-                    return;
-                }
+                setError(''); setSuccess('');
+                const code = friendCode.trim();
+                if (!/^\d{4}$/.test(code)) { setError("Please enter a valid 4-digit Friend Code."); return; }
+                if (code === user.friendCode) { setError("You can't add yourself as a friend."); return; }
                 
-                const friendDocRef = services.doc(services.db, `artifacts/${appId}/public/data/users`, id);
-                const friendSnap = await services.getDoc(friendDocRef);
-                
-                if (!friendSnap.exists()) {
-                    setError("User not found.");
-                    return;
-                }
+                const usersRef = services.collection(services.db, `artifacts/${appId}/public/data/users`);
+                const q = services.query(usersRef, services.where("friendCode", "==", code), services.limit(1));
+                const querySnapshot = await services.getDocs(q);
 
-                const requestRef = services.doc(services.db, `artifacts/${appId}/public/data/users/${id}/friendRequests`, user.uid);
+                if (querySnapshot.empty) { setError("User not found."); return; }
+
+                const friendDoc = querySnapshot.docs[0];
+                const friendData = friendDoc.data();
+
+                const requestRef = services.doc(services.db, `artifacts/${appId}/public/data/users/${friendData.uid}/friendRequests`, user.uid);
                 await services.setDoc(requestRef, {
-                    from: user.uid,
-                    displayName: user.displayName,
-                    photoURL: user.photoURL,
-                    status: 'pending',
-                    createdAt: services.serverTimestamp()
+                    from: user.uid, displayName: user.displayName, photoURL: user.photoURL, status: 'pending', createdAt: services.serverTimestamp()
                 });
                 
                 setSuccess("Friend request sent!");
                 setTimeout(closeModal, 1500);
             }
-
              return (
                  <Modal title="Add a Friend" closeModal={closeModal}>
-                     <p className="text-sm text-gray-400 mb-4">Enter your friend's unique User ID to send a request.</p>
+                     <p className="text-sm text-gray-400 mb-4">Enter your friend's 4-digit code to send a request.</p>
                      <form onSubmit={handleAddFriend}>
-                        <label htmlFor="friendId" className="block text-gray-400 text-sm font-bold mb-2">User ID</label>
-                        <input id="friendId" type="text" value={friendId} onChange={(e) => setFriendId(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-purple-500" />
+                        <label htmlFor="friendCode" className="block text-gray-400 text-sm font-bold mb-2">Friend Code</label>
+                        <input id="friendCode" type="text" value={friendCode} onChange={(e) => setFriendCode(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-purple-500" maxLength="4" />
                         {error && <p className="text-red-400 text-sm text-center my-4">{error}</p>}
                         {success && <p className="text-green-400 text-sm text-center my-4">{success}</p>}
-                        <div className="flex justify-end space-x-4 mt-6">
-                            <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
-                            <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md">Send Request</button>
-                        </div>
+                        <div className="flex justify-end space-x-4 mt-6"><button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button><button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md">Send Request</button></div>
                      </form>
                  </Modal>
             )
@@ -903,86 +636,54 @@
             const [isUploading, setIsUploading] = useState(false);
             const [error, setError] = useState('');
             const profilePicInputRef = useRef(null);
-
             const handleUpdateProfile = async (e) => {
                 e.preventDefault();
                 if(!displayName.trim()) { setError('Display name cannot be empty.'); return; }
                 setError('');
                 const userDocRef = services.doc(db, `artifacts/${appId}/public/data/users/${user.uid}`);
-                try {
-                    await services.updateDoc(userDocRef, { displayName });
-                    closeModal();
-                } catch(err) {
-                    console.error("Error updating display name:", err);
-                    setError('Failed to update profile.');
-                }
+                try { await services.updateDoc(userDocRef, { displayName }); closeModal(); } 
+                catch(err) { console.error("Error updating display name:", err); setError('Failed to update profile.'); }
             };
-            
             const handleProfilePicChange = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
                 if (!file.type.startsWith('image/')) { setError('Please select an image file.'); return; }
                 if (file.size > 5 * 1024 * 1024) { setError('File size should not exceed 5MB.'); return; }
-                
-                setError('');
-                setIsUploading(true);
+                setError(''); setIsUploading(true);
                 const storageRef = services.ref(storage, `profile_pics/${user.uid}`);
-                
                 try {
                     await services.uploadBytes(storageRef, file);
                     const downloadURL = await services.getDownloadURL(storageRef);
                     const userDocRef = services.doc(db, `artifacts/${appId}/public/data/users/${user.uid}`);
                     await services.updateDoc(userDocRef, { photoURL: downloadURL });
-                } catch(err) {
-                    console.error("Error uploading profile picture:", err);
-                    setError('Failed to upload picture.');
-                } finally {
-                    setIsUploading(false);
-                }
+                } catch(err) { console.error("Error uploading profile picture:", err); setError('Failed to upload picture.'); } 
+                finally { setIsUploading(false); }
             };
-
             return (
                 <Modal title="Edit Profile" closeModal={closeModal}>
                     <div className="flex flex-col items-center mb-6">
                          <img src={user.photoURL || `https://placehold.co/96x96/374151/E5E7EB?text=${(displayName || 'U')[0]}`} alt="Profile" className="w-24 h-24 rounded-full mb-4 object-cover" />
                          <input type="file" accept="image/*" ref={profilePicInputRef} onChange={handleProfilePicChange} className="hidden" />
-                         <button onClick={() => profilePicInputRef.current.click()} disabled={isUploading} className="bg-gray-700 hover:bg-gray-600 text-white text-sm py-1 px-3 rounded-md disabled:opacity-50">
-                             {isUploading ? 'Uploading...' : 'Change Picture'}
-                         </button>
+                         <button onClick={() => profilePicInputRef.current.click()} disabled={isUploading} className="bg-gray-700 hover:bg-gray-600 text-white text-sm py-1 px-3 rounded-md disabled:opacity-50">{isUploading ? 'Uploading...' : 'Change Picture'}</button>
                     </div>
                     {error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}
                     <form onSubmit={handleUpdateProfile}>
                         <div className="mb-4">
+                            <label className="block text-gray-400 text-sm font-bold mb-2">Your Friend Code</label>
+                            <p className="w-full bg-gray-900 rounded-md py-2 px-3 text-white text-lg tracking-widest font-mono text-center">{user.friendCode}</p>
+                        </div>
+                        <div className="mb-4">
                             <label htmlFor="displayName" className="block text-gray-400 text-sm font-bold mb-2">Display Name</label>
-                            <input
-                                id="displayName"
-                                type="text"
-                                value={displayName}
-                                onChange={(e) => setDisplayName(e.target.value)}
-                                className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-purple-500"
-                            />
+                            <input id="displayName" type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-purple-500"/>
                         </div>
-                        <div className="flex items-center justify-end space-x-4">
-                             <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
-                             <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none">Save</button>
-                        </div>
+                        <div className="flex items-center justify-end space-x-4"><button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button><button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none">Save</button></div>
                     </form>
                 </Modal>
             );
         }
 
         function Modal({ title, children, closeModal }) {
-             return (
-                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-                    <div className="bg-gray-800 rounded-lg p-8 w-full max-w-md mx-auto">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-2xl font-bold text-white">{title}</h2>
-                            <button onClick={closeModal} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
-                        </div>
-                        {children}
-                    </div>
-                </div>
-            );
+             return (<div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"><div className="bg-gray-800 rounded-lg p-8 w-full max-w-md mx-auto"><div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-white">{title}</h2><button onClick={closeModal} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button></div>{children}</div></div>);
         }
 
         ReactDOM.render(<App />, document.getElementById('root'));
