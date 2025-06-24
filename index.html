@@ -356,7 +356,7 @@
                             <button onClick={() => setShowJoinRoomModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Join Group</button>
                             <button onClick={() => setShowAddFriendModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Add Friend</button>
                             <button onClick={() => setShowProfileModal(true)} className="w-full text-left text-sm p-2 rounded-md hover:bg-gray-700">Edit Profile</button>
-                             <p className="text-xs text-gray-500 text-center mt-2">v 1.0</p>
+                             <p className="text-xs text-gray-500 text-center mt-2">v 2.0</p>
                         </div>
                         
                         {showCreateRoomModal && <CreateRoomModal user={user} services={services} closeModal={() => setShowCreateRoomModal(false)} />}
@@ -496,36 +496,34 @@
             }, [activeRoom]);
 
             useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-
-            const WelcomeContent = () => (
-                 <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
-                    <div>
-                        <h2 className="text-2xl font-bold">Welcome</h2>
-                        <p className="text-gray-400 mt-2">Select a room or a friend to start chatting.</p>
-                    </div>
-                </div>
-            );
-
-            const ChatContent = () => (
-                <React.Fragment>
-                    <div className="flex-1 p-4 sm:p-6 overflow-y-auto">{messages.map(msg => (msg.type === 'system' ? <SystemMessage key={msg.id} text={msg.text} /> : <MessageBubble key={msg.id} message={msg} isOwnMessage={msg.uid === user.uid} onReply={setReplyTo} />))}<div ref={messagesEndRef} /></div>
-                    <MessageInput user={user} services={services} activeRoom={activeRoom} replyTo={replyTo} setReplyTo={setReplyTo} />
-                </React.Fragment>
-            );
-
+            
             return (
-                <main className="main-chat-area flex-1 min-w-0 h-full">
-                    <header className="flex-shrink-0 bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 p-3 flex items-center justify-between z-10 sticky top-0">
+                <main className="main-chat-area flex-1 flex flex-col h-screen">
+                    <header className="flex-shrink-0 bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 p-3 flex items-center justify-between z-10">
                         <div className="flex items-center min-w-0">
                              <button onClick={() => setIsSidebarOpen(true)} className="p-1 text-gray-400 hover:text-white mr-2 md:hidden">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
                              </button>
                             <h2 className="text-xl font-semibold truncate">
-                                {activeRoom ? `# ${getDmName(activeRoom)}` : 'Home'}
+                                {activeRoom ? `# ${getDmName(activeRoom)}` : 'Welcome'}
                             </h2>
                         </div>
                     </header>
-                    {activeRoom ? <ChatContent /> : <WelcomeContent />}
+                    
+                    <div className="flex-1 min-h-0 p-4 sm:p-6 overflow-y-auto">
+                        {!activeRoom && (
+                             <div className="flex h-full flex-col items-center justify-center text-center p-4">
+                                <div>
+                                    <h2 className="text-2xl font-bold">Welcome</h2>
+                                    <p className="text-gray-400 mt-2">Select a room or a friend to start chatting.</p>
+                                </div>
+                            </div>
+                        )}
+                        {activeRoom && messages.map(msg => (msg.type === 'system' ? <SystemMessage key={msg.id} text={msg.text} /> : <MessageBubble key={msg.id} message={msg} isOwnMessage={msg.uid === user.uid} onReply={setReplyTo} />))}
+                        {activeRoom && <div ref={messagesEndRef} />}
+                    </div>
+                    
+                    {activeRoom && <MessageInput user={user} services={services} activeRoom={activeRoom} replyTo={replyTo} setReplyTo={setReplyTo} />}
                 </main>
             );
         }
