@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Company Chat</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts for a nicer look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Use the Inter font family and add some base styling */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom scrollbar for a cleaner look in chat areas */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280; 
+        }
+    </style>
+</head>
+<body class="bg-gray-900">
+    <!-- This is where our React application will be rendered -->
+    <div id="root"></div>
+
+    <!-- React Libraries -->
+    <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel to transpile JSX in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Firebase SDKs (Updated to v11.6.1) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, setDoc, query, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+
+        // Make Firebase services available globally for our React script
+        window.firebaseServices = {
+            initializeApp,
+            getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken,
+            getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, setDoc, query, updateDoc,
+            getStorage, ref, uploadBytes, getDownloadURL
+        };
+    </script>
+
+    <!-- Our React Application Code -->
+    <script type="text/babel" data-presets="react">
+        const { useState, useEffect, useRef } = React;
+        
+        // --- Firebase Configuration ---
+        // YOUR ACTUAL FIREBASE CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyCcqfbDluQqNBDCElYzVOg3pBV5bG46Sjc",
+            authDomain: "chat-39642.firebaseapp.com",
+            databaseURL: "https://chat-39642-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "chat-39642",
+            storageBucket: "chat-39642.firebasestorage.app",
+            messagingSenderId: "593980460968",
+            appId: "1:593980460968:web:7bdcd3f9ae9c1cb013179d",
+            measurementId: "G-DB1WNLYV81"
+        };
+
+        // --- App ID Configuration ---
+        const appId = 'company-chat-v1'; // Unique identifier for your chat app
+
+        // --- Main App Component ---
+        function App() {
+            const [services, setServices] = useState(null);
+            const [user, setUser] = useState(null);
+            const [isAuthReady, setIsAuthReady] = useState(false);
+            const [connectionError, setConnectionError] = useState(null);
+
+            useEffect(() => {
+                // Set a timeout to handle cases where connection fails
+                const connectionTimeout = setTimeout(() => {
+                    if (!isAuthReady) {
+                        setConnectionError(
+                            "Could not connect to the chat server. Please check your internet connection and try refreshing the page."
+                        );
+                    }
+                }, 8000); // 8-second timeout
+
+                // Wait for Firebase services to be loaded into the window object
+                const serviceCheckInterval = setInterval(() => {
+                    if (window.firebaseServices) {
+                        clearInterval(serviceCheckInterval);
+                        
+                        try {
+                            const s = window.firebaseServices;
+                            const app = s.initializeApp(firebaseConfig);
+                            const auth = s.getAuth(app);
+                            const db = s.getFirestore(app);
+                            const storage = s.getStorage(app);
+                            
+                            const currentServices = { app, auth, db, storage, ...s };
+                            setServices(currentServices);
+
+                            let userDocUnsubscribe = null;
+                            const authUnsubscribe = s.onAuthStateChanged(auth, async (auth_user) => {
+                                if (auth_user) {
+                                    if (userDocUnsubscribe) userDocUnsubscribe();
+                                    
+                                    const userDocRef = s.doc(db, `artifacts/${appId}/public/data/users/${auth_user.uid}`);
+                                    userDocUnsubscribe = s.onSnapshot(userDocRef, (userDoc) => {
+                                        clearTimeout(connectionTimeout); // Successfully connected
+                                        if (userDoc.exists()) {
+                                            setUser({ ...auth_user, ...userDoc.data() });
+                                        } else {
+                                            const initialUserData = { 
+                                                uid: auth_user.uid,
+                                                displayName: `User-${auth_user.uid.substring(0, 6)}`,
+                                                photoURL: '',
+                                                lastSeen: s.serverTimestamp(),
+                                            };
+                                            s.setDoc(userDocRef, initialUserData).then(() => {
+                                                setUser({ ...auth_user, ...initialUserData });
+                                            });
+                                        }
+                                        setIsAuthReady(true);
+                                    });
+                                } else {
+                                    if (userDocUnsubscribe) userDocUnsubscribe();
+                                    setUser(null);
+                                    await s.signInAnonymously(auth);
+                                }
+                            });
+
+                            // Cleanup function for useEffect
+                            return () => {
+                                clearTimeout(connectionTimeout);
+                                authUnsubscribe();
+                                if(userDocUnsubscribe) userDocUnsubscribe();
+                            };
+                        } catch (error) {
+                            console.error("Firebase Init Error:", error);
+                            setConnectionError("Failed to initialize the application. Please check the Firebase configuration.");
+                        }
+                    }
+                }, 100);
+
+                return () => {
+                  clearTimeout(connectionTimeout);
+                  clearInterval(serviceCheckInterval);
+                }
+            }, []);
+
+            if (connectionError) {
+                return (
+                    <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
+                        <div className="text-center p-8 bg-gray-800 rounded-lg shadow-lg max-w-md">
+                            <h2 className="text-2xl font-bold text-red-500 mb-4">Connection Failed</h2>
+                            <p className="text-gray-300 mb-4">{connectionError}</p>
+                            <button 
+                                onClick={() => window.location.reload()} 
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+                            >
+                                Try Again
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!isAuthReady || !user || !services) {
+                return (
+                    <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
+                        <div className="text-center">
+                            <svg className="animate-spin h-10 w-10 text-blue-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <p className="text-xl">Connecting to Company Chat...</p>
+                            <p className="text-sm text-gray-400 mt-2">Setting up secure connection...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return <ChatInterface user={user} services={services} />;
+        }
+        
+        // --- Chat Interface Component ---
+        function ChatInterface({ user, services }) {
+            const { db, storage } = services;
+            const [messages, setMessages] = useState([]);
+            const [newMessage, setNewMessage] = useState('');
+            const [users, setUsers] = useState([]);
+            const [showProfileModal, setShowProfileModal] = useState(false);
+            const messagesEndRef = useRef(null);
+            const fileInputRef = useRef(null);
+
+            const messagesCollectionRef = services.collection(db, `artifacts/${appId}/public/data/messages`);
+            const usersCollectionRef = services.collection(db, `artifacts/${appId}/public/data/users`);
+
+            useEffect(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), [messages]);
+            
+            useEffect(() => {
+                const q = services.query(messagesCollectionRef);
+                const unsubscribe = services.onSnapshot(q, (querySnapshot) => {
+                    const msgs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    msgs.sort((a, b) => a.createdAt?.seconds - b.createdAt?.seconds);
+                    setMessages(msgs);
+                });
+                return unsubscribe;
+            }, []);
+
+            useEffect(() => {
+                const userDocRef = services.doc(db, `artifacts/${appId}/public/data/users/${user.uid}`);
+                services.setDoc(userDocRef, { lastSeen: services.serverTimestamp() }, { merge: true });
+
+                const unsubscribeUsers = services.onSnapshot(usersCollectionRef, (querySnapshot) => {
+                    setUsers(querySnapshot.docs.map(d => d.data()));
+                });
+                return unsubscribeUsers;
+            }, [user.uid]);
+
+            const handleSendMessage = async (e) => {
+                e.preventDefault();
+                if (newMessage.trim() === '') return;
+                try {
+                    await services.addDoc(messagesCollectionRef, {
+                        text: newMessage,
+                        createdAt: services.serverTimestamp(),
+                        uid: user.uid,
+                        displayName: user.displayName || `User-${user.uid.substring(0, 6)}`,
+                        photoURL: user.photoURL || '',
+                        type: 'text',
+                    });
+                    setNewMessage('');
+                } catch (error) { console.error("Error sending message: ", error); }
+            };
+
+            const handleFileUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const storageRef = services.ref(storage, `chat_files/${appId}/${file.name}_${Date.now()}`);
+                try {
+                    await services.uploadBytes(storageRef, file);
+                    const downloadURL = await services.getDownloadURL(storageRef);
+                    const fileType = file.type.startsWith('image/') ? 'image' : 'document';
+                    await services.addDoc(messagesCollectionRef, {
+                        createdAt: services.serverTimestamp(),
+                        uid: user.uid,
+                        displayName: user.displayName || `User-${user.uid.substring(0, 6)}`,
+                        photoURL: user.photoURL || '',
+                        type: fileType,
+                        fileURL: downloadURL,
+                        fileName: file.name
+                    });
+                } catch(error) { console.error("Error uploading file:", error); }
+            };
+
+            return (
+                <React.Fragment>
+                    <div className="flex h-screen antialiased text-gray-200 bg-gray-900">
+                        <aside className="flex flex-col w-64 bg-gray-900 border-r border-gray-700 flex-shrink-0">
+                            <div className="flex-shrink-0 px-4 py-3 border-b border-gray-700">
+                                 <h1 className="text-xl font-bold text-white">Company Chat</h1>
+                                 <p className="text-xs text-gray-400 mt-1 truncate" title={user.uid}>Your ID: {user.uid}</p>
+                                 <button onClick={() => setShowProfileModal(true)} className="mt-2 w-full text-sm bg-blue-600 hover:bg-blue-700 rounded-md py-1">Edit Profile</button>
+                            </div>
+                            <div className="flex-grow p-4 overflow-y-auto">
+                                <h2 className="text-sm font-semibold text-gray-400 mb-3">Online Users</h2>
+                                <ul>
+                                    {users.map(u => (
+                                        <li key={u.uid} className={`flex items-center p-2 rounded-md ${u.uid === user.uid ? 'bg-blue-900/50' : ''}`}>
+                                            <img src={u.photoURL || `https://placehold.co/32x32/374151/E5E7EB?text=${(u.displayName || 'U')[0]}`} alt={u.displayName} className="w-8 h-8 rounded-full mr-3" />
+                                            <span className="text-sm">{u.displayName}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </aside>
+                        <main className="flex flex-col flex-1 min-w-0">
+                            <div className="flex-1 p-4 sm:p-6 justify-between flex flex-col overflow-y-auto">
+                                <div id="messages" className="flex flex-col space-y-4 p-3">
+                                    {messages.map(message => <MessageBubble key={message.id} message={message} user={user} isOwnMessage={message.uid === user.uid} /> )}
+                                     <div ref={messagesEndRef} />
+                                </div>
+                                <div className="border-t-2 border-gray-700 px-4 pt-4 mb-2 sm:mb-0">
+                                    <form onSubmit={handleSendMessage} className="relative flex">
+                                         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+                                        <button type="button" onClick={() => fileInputRef.current.click()} className="absolute left-0 inset-y-0 flex items-center justify-center px-3 text-gray-400 hover:text-gray-200" title="Attach file">
+                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+                                        </button>
+                                        <input
+                                            type="text"
+                                            value={newMessage}
+                                            onChange={(e) => setNewMessage(e.target.value)}
+                                            placeholder="Write your message!"
+                                            className="w-full focus:outline-none focus:placeholder-gray-400 text-gray-200 placeholder-gray-500 pl-12 pr-20 bg-gray-800 rounded-md py-3 border border-gray-600 focus:border-blue-500"
+                                        />
+                                        <div className="absolute right-0 items-center inset-y-0 hidden sm:flex">
+                                            <button type="submit" className="inline-flex items-center justify-center rounded-lg px-4 py-2 transition duration-500 ease-in-out text-white bg-blue-600 hover:bg-blue-700 focus:outline-none mr-2">
+                                                <span className="font-bold">Send</span>
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-6 w-6 ml-2 transform rotate-90"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </main>
+                    </div>
+                    {showProfileModal && <ProfileModal user={user} services={services} closeModal={() => setShowProfileModal(false)} />}
+                </React.Fragment>
+            );
+        }
+
+        // --- Message Bubble Component ---
+        function MessageBubble({ message, isOwnMessage, user }) {
+            const renderContent = () => {
+                switch (message.type) {
+                    case 'image':
+                        return <img src={message.fileURL} alt={message.fileName || 'Uploaded image'} className="rounded-lg max-w-xs cursor-pointer" onClick={()=> window.open(message.fileURL, "_blank")} />;
+                    case 'document':
+                        return (
+                            <a href={message.fileURL} target="_blank" rel="noopener noreferrer" className="flex items-center bg-gray-600 p-2 rounded-lg hover:bg-gray-500">
+                                <svg className="w-6 h-6 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                <span className="truncate">{message.fileName}</span>
+                            </a>
+                        );
+                    default:
+                        return message.text;
+                }
+            };
+            
+            const avatarSrc = isOwnMessage ? user.photoURL : message.photoURL;
+            const displayName = isOwnMessage ? user.displayName : message.displayName;
+            const avatarText = (displayName || 'U')[0];
+
+            return (
+                <div className={`chat-message flex items-end ${isOwnMessage ? 'justify-end' : ''}`}>
+                     {!isOwnMessage && <img src={avatarSrc || `https://placehold.co/32x32/374151/E5E7EB?text=${avatarText}`} alt={displayName} className="w-8 h-8 rounded-full order-1" />}
+                    <div className={`flex flex-col space-y-1 text-sm max-w-xs mx-2 ${isOwnMessage ? 'order-1 items-end' : 'order-2 items-start'}`}>
+                        <div>
+                             {!isOwnMessage && <div className="text-xs text-gray-400 mb-1 px-1">{displayName}</div>}
+                            <span className={`px-4 py-2 rounded-lg inline-block ${isOwnMessage ? 'rounded-br-none bg-blue-600 text-white' : 'rounded-bl-none bg-gray-700 text-gray-200'}`}>
+                                {renderContent()}
+                            </span>
+                        </div>
+                    </div>
+                     {isOwnMessage && <img src={avatarSrc || `https://placehold.co/32x32/374151/E5E7EB?text=${avatarText}`} alt={displayName} className="w-8 h-8 rounded-full order-2" />}
+                </div>
+            );
+        }
+
+        // --- Profile Modal Component ---
+        function ProfileModal({ user, services, closeModal }) {
+            const { db, storage } = services;
+            const [displayName, setDisplayName] = useState(user.displayName || '');
+            const [isUploading, setIsUploading] = useState(false);
+            const [error, setError] = useState('');
+            const profilePicInputRef = useRef(null);
+
+            const handleUpdateProfile = async (e) => {
+                e.preventDefault();
+                if(!displayName.trim()) { setError('Display name cannot be empty.'); return; }
+                setError('');
+                const userDocRef = services.doc(db, `artifacts/${appId}/public/data/users/${user.uid}`);
+                try {
+                    await services.updateDoc(userDocRef, { displayName });
+                    closeModal();
+                } catch(err) {
+                    console.error("Error updating display name:", err);
+                    setError('Failed to update profile.');
+                }
+            };
+            
+            const handleProfilePicChange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                if (!file.type.startsWith('image/')) { setError('Please select an image file.'); return; }
+                if (file.size > 5 * 1024 * 1024) { setError('File size should not exceed 5MB.'); return; }
+                
+                setError('');
+                setIsUploading(true);
+                const storageRef = services.ref(storage, `profile_pics/${appId}/${user.uid}`);
+                
+                try {
+                    await services.uploadBytes(storageRef, file);
+                    const downloadURL = await services.getDownloadURL(storageRef);
+                    const userDocRef = services.doc(db, `artifacts/${appId}/public/data/users/${user.uid}`);
+                    await services.updateDoc(userDocRef, { photoURL: downloadURL });
+                } catch(err) {
+                    console.error("Error uploading profile picture:", err);
+                    setError('Failed to upload picture.');
+                } finally {
+                    setIsUploading(false);
+                }
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+                    <div className="bg-gray-800 rounded-lg p-8 w-full max-w-md mx-4">
+                        <h2 className="text-2xl font-bold text-white mb-6">Edit Profile</h2>
+                        <div className="flex flex-col items-center mb-6">
+                             <img src={user.photoURL || `https://placehold.co/96x96/374151/E5E7EB?text=${(displayName || 'U')[0]}`} alt="Profile" className="w-24 h-24 rounded-full mb-4 object-cover" />
+                             <input type="file" accept="image/*" ref={profilePicInputRef} onChange={handleProfilePicChange} className="hidden" />
+                             <button onClick={() => profilePicInputRef.current.click()} disabled={isUploading} className="bg-gray-700 hover:bg-gray-600 text-white text-sm py-1 px-3 rounded-md disabled:opacity-50">
+                                 {isUploading ? 'Uploading...' : 'Change Picture'}
+                             </button>
+                        </div>
+                        {error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}
+                        <form onSubmit={handleUpdateProfile}>
+                            <div className="mb-4">
+                                <label htmlFor="displayName" className="block text-gray-400 text-sm font-bold mb-2">Display Name</label>
+                                <input
+                                    id="displayName"
+                                    type="text"
+                                    value={displayName}
+                                    onChange={(e) => setDisplayName(e.target.value)}
+                                    className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:border-blue-500"
+                                />
+                            </div>
+                            <div className="flex items-center justify-end space-x-4">
+                                 <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">Cancel</button>
+                                 <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none">Save</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- Render the App ---
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+
+</body>
+</html>
